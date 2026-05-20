@@ -10,9 +10,10 @@ Implementation tasks in priority order. Check off when merged to main.
   structure)
 - Add dependencies: Drift, Riverpod, flutter_blue_plus (or equivalent BT HR
   plugin)
-- Create Drift database with `activities`, `samples`, and `markers` tables per
-  data-model.md
-- Bluetooth HR device scan + connect flow (Confirm record screen)
+- Create Drift database with `devices`, `activities`, `samples`, and `markers`
+  tables per data-model.md
+- Bluetooth: device picker (scan + list nearby HR devices, save chosen device)
+- Bluetooth: auto-connect to last known device on subsequent sessions
 - Live HR reading from BT device, persisted as samples in real time
 - Recording screen: display current BPM, elapsed time, min/avg/max
 - Stop recording flow with confirmation modal

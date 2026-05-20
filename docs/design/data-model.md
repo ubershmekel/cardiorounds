@@ -8,9 +8,17 @@ CREATE TABLE athletes (
   name TEXT
 );
 
+CREATE TABLE devices (
+  id INTEGER PRIMARY KEY,
+  platform_id TEXT NOT NULL UNIQUE, -- MAC on Android, UUID on iOS
+  name TEXT NOT NULL,
+  last_connected_at_ms INTEGER NOT NULL
+);
+
 CREATE TABLE activities (
   id INTEGER PRIMARY KEY,
   athlete_id INTEGER NOT NULL,
+  device_id INTEGER,               -- NULL if device was deleted
   started_at_ms INTEGER NOT NULL,
   duration_ms INTEGER NOT NULL,
 
@@ -18,7 +26,9 @@ CREATE TABLE activities (
   sparkline TEXT,
 
   created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL
+  updated_at_ms INTEGER NOT NULL,
+
+  FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL
 );
 
 CREATE TABLE samples (

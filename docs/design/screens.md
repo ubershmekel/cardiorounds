@@ -21,26 +21,63 @@ recording.
 
 ## Confirm record screen
 
-This screen detects the bluetooth heart rate device. Shows the user the status
-of the device.
+This screen handles Bluetooth HR device connection before recording starts.
 
-You can go back or cancel.
+### Auto-connect (returning user)
 
-Once a device is detected you can tap the "Start recording" button which leads
-to the recording screen.
+If the app has a previously connected device, it immediately begins scanning for
+it and shows a "Connecting to [Device Name]…" status. Once connected, a "Start
+recording" button appears. The user can still tap "Choose a different device" to
+open the device picker instead.
+
+If auto-connect does not succeed within ~10 seconds, the device picker opens
+automatically.
+
+### Device picker (first time or manual)
+
+Shows a scrollable list of nearby Bluetooth HR devices found by scanning. Each
+row shows the device name and signal strength. Tapping a device attempts to
+connect. On success the device is saved to the `devices` table and the "Start
+recording" button appears.
+
+### States shown on this screen
+
+- Scanning / connecting…
+- Connected — [Device Name] — ready to start
+- No devices found — retry button
+- Bluetooth is off — prompt to enable it
+
+You can go back or cancel from any state.
 
 ## Recording screen
 
 Show:
 
-- The current heart rate
+- The current heart rate (large, prominent)
 - A button to stop recording (requires confirmation modal)
-- A chart of the workout HR over time
+- A live HR chart (see Chart spec below)
 - Max heart rate so far
 - Min heart rate so far
 - Average heart rate
 - Button to tag a moment (writes a `moment` human marker at the current
   timestamp)
+
+## Chart spec
+
+Applies to both the recording screen and workout review screen.
+
+- **X axis**: elapsed time from recording start
+- **Y axis**: BPM, auto-scaled with a small margin above the session max, the
+  minimum value is a ten-rounded number under the minimum HR (like 40).
+- **Line**: continuous, colored by zone (see zones.md).
+- **Markers**: vertical tick lines at each marker's timestamp; `round_start`
+  ticks are taller than `moment` ticks; `workout_start` / `workout_end` are
+  shown as boundary lines that dim the chart outside the effort period
+- **Recording screen behavior**: the chart scrolls so the latest reading is
+  always visible on the right; shows the last ~5 minutes by default with a
+  pinch-to-zoom to see more history
+- **Review screen behavior**: the full session is shown at once, fitting the
+  width; pinch-to-zoom to inspect detail
 
 ## Workout review screen
 
