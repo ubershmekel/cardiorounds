@@ -38,4 +38,28 @@ CREATE TABLE samples (
 
 CREATE INDEX samples_activity_time_idx
 ON samples(activity_id, t_ms);
+
+CREATE TABLE markers (
+  id INTEGER PRIMARY KEY,
+  activity_id INTEGER NOT NULL,
+  t_ms INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  note TEXT,
+
+  FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+);
+
+CREATE INDEX markers_activity_time_idx
+ON markers(activity_id, t_ms);
 ```
+
+### Marker kinds
+
+Example kinds (not exhaustive):
+
+- `workout_start` — adjustable start of the effort period; overrides
+  `started_at_ms` for display and analysis
+- `workout_end` — adjustable end; overrides raw `duration_ms`
+- `round_start` — start of a round, placed by the user or auto-detected by
+  analysis
+- `moment` — freeform tap during recording, with optional `note`

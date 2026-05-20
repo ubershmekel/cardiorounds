@@ -39,7 +39,8 @@ Show:
 - Max heart rate so far
 - Min heart rate so far
 - Average heart rate
-- Button to tag a moment
+- Button to tag a moment (writes a `moment` human marker at the current
+  timestamp)
 
 ## Workout review screen
 
@@ -48,6 +49,21 @@ minute.
 
 Generally we want the review screen to show the same data as the recording
 screen. Plus some more in-depth analysis and advice.
+
+### Marker editing on the review screen
+
+To edit markers, tap the "edit" button on the chart first which will make the
+marker ui interactive.
+
+The user can adjust the workout boundaries after the fact by dragging
+`workout_start` and `workout_end` markers on the chart. This is useful when
+recording started early (e.g. while still walking to the mat) or ended late.
+
+Human `round_start` markers placed during recording appear as vertical tick
+marks on the chart. The user can drag, add, or delete them here.
+
+Analysis-generated `round_start` markers are shown in a muted style. Editing one
+converts it to a human marker.
 
 ## Settings screen
 

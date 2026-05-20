@@ -10,13 +10,15 @@ Implementation tasks in priority order. Check off when merged to main.
   structure)
 - Add dependencies: Drift, Riverpod, flutter_blue_plus (or equivalent BT HR
   plugin)
-- Create Drift database with `activities` and `samples` tables per data-model.md
+- Create Drift database with `activities`, `samples`, and `markers` tables per
+  data-model.md
 - Bluetooth HR device scan + connect flow (Confirm record screen)
 - Live HR reading from BT device, persisted as samples in real time
 - Recording screen: display current BPM, elapsed time, min/avg/max
 - Stop recording flow with confirmation modal
-- Recording screen: live HR chart (time on X, BPM on Y)
-- Workout review screen: full HR chart for the completed session
+- Recording screen: live HR chart (time on X, BPM on Y) with label tick marks
+- Workout review screen: full HR chart with draggable workout_start/end markers
+- Workout review screen: display and edit round_start markers on the chart
 - Home screen: list of past activities with basic summary row
 
 ---
@@ -32,6 +34,7 @@ Implementation tasks in priority order. Check off when merged to main.
 
 ## Milestone 3 — Analysis + History
 
+- Tap-to-tag button writes a `moment` human label during recording
 - Load score calculation (extra beats above resting HR)
 - Session shape fingerprint (▇▆▃ sparkline stored in activities table)
 - Recovery event detection (Z5 → Z3 drop timing)
