@@ -48,6 +48,16 @@ docs/design/
   data-model.md             ← entities, fields, nullability, derived fields
   screens.md                ← screens, interactions, edge cases
   tech-stack.md             ← dependency choices and rejected alternatives
+  todo.md                   ← ordered implementation tasks, MVP first
 
 docs/development.md         ← how to run, test, build, and release
 ```
+
+### todo.md
+
+This file tracks what remains to be built, in priority order. It is the single
+source of truth for "what's next."
+
+Remove tasks when they are completed.
+
+Add a task when you discover work that isn't captured yet.
