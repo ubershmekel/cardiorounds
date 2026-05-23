@@ -5,7 +5,10 @@ How we store, and query data to make the app reliable and fast.
 ```sql
 CREATE TABLE athletes (
   id INTEGER PRIMARY KEY,
-  name TEXT
+  name TEXT NOT NULL,
+  resting_heartrate INTEGER NOT NULL,
+  max_heartrate INTEGER NOT NULL,
+  created_at_ms INTEGER NOT NULL
 );
 
 CREATE TABLE devices (
