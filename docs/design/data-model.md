@@ -25,8 +25,10 @@ CREATE TABLE activities (
   started_at_ms INTEGER NOT NULL,
   duration_ms INTEGER NOT NULL,
 
+  name TEXT,                       -- optional user-supplied title
+  note TEXT,
   sport_type TEXT,
-  sparkline TEXT,
+  sparkline TEXT,                  -- 3 Unicode block chars (e.g. ▇▆▃): beginning/middle/end load
 
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL,
@@ -38,7 +40,7 @@ CREATE TABLE samples (
   activity_id INTEGER NOT NULL,
   t_ms INTEGER NOT NULL,
 
-  hr INTEGER,              -- bpm
+  hr INTEGER,              -- bpm; NULL means signal was lost at this timestamp
   -- lat_e7 INTEGER,          -- latitude * 10,000,000
   -- lon_e7 INTEGER,          -- longitude * 10,000,000
   -- altitude_cm INTEGER,     -- meters * 100
@@ -49,6 +51,9 @@ CREATE TABLE samples (
   FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
 ) WITHOUT ROWID;
 
+-- WITHOUT ROWID tables use the PRIMARY KEY as their clustered B-tree, so this
+-- index is redundant. Kept here explicitly to document that queries on
+-- (activity_id, t_ms) are always fast.
 CREATE INDEX samples_activity_time_idx
 ON samples(activity_id, t_ms);
 
@@ -56,8 +61,9 @@ CREATE TABLE markers (
   id INTEGER PRIMARY KEY,
   activity_id INTEGER NOT NULL,
   t_ms INTEGER NOT NULL,
+  duration_ms INTEGER,             -- NULL = point marker; non-NULL = span marker
   kind TEXT NOT NULL,
-  note TEXT,
+  name TEXT,                       -- optional short label or note
 
   FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
 );
@@ -68,11 +74,24 @@ ON markers(activity_id, t_ms);
 
 ### Marker kinds
 
-Example kinds (not exhaustive):
+A marker with `duration_ms = NULL` is a point in time. A marker with a non-NULL
+`duration_ms` spans a time range from `t_ms` to `t_ms + duration_ms`.
 
-- `workout_start` — adjustable start of the effort period; overrides
-  `started_at_ms` for display and analysis
-- `workout_end` — adjustable end; overrides raw `duration_ms`
-- `round_start` — start of a round, placed by the user or auto-detected by
-  analysis
-- `moment` — freeform tap during recording, with optional `note`
+| Kind       | Type  | Description                                                                                                                                 |
+| ---------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workout`  | span  | The effort window. Overrides `started_at_ms` / `duration_ms` for display and analysis. At most one per activity; enforced in the DAO layer. |
+| `round`    | span  | A single round or effort period, placed by the user or auto-detected.                                                                       |
+| `recovery` | span  | A detected recovery event (e.g. Z5 → Z3 drop).                                                                                              |
+| `moment`   | point | Freeform tap during recording, with optional `name`.                                                                                        |
+
+### Settings storage
+
+`max_heartrate` and `resting_heartrate` are stored on the `athletes` row. The UI
+in v0 treats the app as single-athlete (one implicit athlete is created on first
+launch), but the DB is intentionally designed for multiple athletes to avoid a
+painful migration later.
+
+### Load score window
+
+The load score (extra beats above resting HR) is computed over the `workout`
+span marker window when one exists, otherwise over the full `duration_ms`.

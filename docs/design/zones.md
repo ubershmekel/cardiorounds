@@ -18,9 +18,10 @@ heart rate minus resting heart rate, which the user sets in Settings.
 
 ## Without a max HR
 
-If the user has not set a max HR, zone coloring is disabled and the chart
-renders from a single neutral color in the minimum HR to pink in the max HR. The
-settings screen prompts the user to enter their max HR to unlock zones.
+If the user has not set a max HR, zone coloring is disabled on both the
+recording screen and the workout review screen. Both show a single neutral
+color for the chart line. A small prompt links to Settings to unlock zones.
+The settings screen also shows this prompt prominently when max HR is absent.
 
 A rough default (220 − age) is intentionally not used — it varies too much
 between individuals and would produce misleading zone boundaries.
