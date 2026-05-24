@@ -28,7 +28,9 @@ CREATE TABLE activities (
   name TEXT,                       -- optional user-supplied title
   note TEXT,
   sport_type TEXT,
-  sparkline TEXT,                  -- 3 Unicode block chars (e.g. ▇▆▃): beginning/middle/end load
+  shape_start INTEGER,             -- 0-9 load value for the first third of the session
+  shape_mid   INTEGER,             -- 0-9 load value for the middle third
+  shape_end   INTEGER,             -- 0-9 load value for the final third
 
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL,
