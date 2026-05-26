@@ -6,13 +6,6 @@ Implementation tasks in priority order. Check off when merged to main.
 
 ## Milestone 1 — Recording + Chart (MVP)
 
-- Flutter project scaffold (package name, app name, theme colors, folder
-  structure)
-- Add dependencies: Drift, Riverpod, flutter_blue_plus (or equivalent BT HR
-  plugin)
-- Create Drift database with `athletes`, `devices`, `activities`, `samples`,
-  and `markers` tables per data-model.md; create a default athlete row on
-  first launch
 - Android: foreground service with a persistent notification to keep recording
   running while the phone is locked; iOS: background modes as required
 - Bluetooth: device picker (scan + list nearby HR devices, save chosen device)

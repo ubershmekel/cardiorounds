@@ -1,0 +1,15 @@
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE files that may appear at repo root if the outer folder is opened
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Flutter detritus that may land at repo root if a command is run from here by mistake
+.dart_tool/
+.flutter-plugins-dependencies
+/build/

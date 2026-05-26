@@ -34,6 +34,35 @@ explaining why.
 
 ---
 
+## Repo Layout
+
+The Flutter project lives in `app/`, not at the repo root. This keeps
+`docs/`, `README.md`, and any future sibling code (firmware, scripts, shared
+Dart packages) cleanly separated from Flutter-generated platform folders.
+
+```text
+.
+├── app/                   ← Flutter project (pubspec.yaml, lib/, android/, ios/, web/)
+├── docs/
+│   └── design/
+└── README.md
+```
+
+Run all Flutter commands from inside `app/`:
+
+```bash
+cd app
+flutter pub get
+flutter run
+flutter analyze
+dart run build_runner build
+```
+
+Target platforms are **android**, **ios**, and **web**. Web is kept for
+hot-reload iteration on static UI; it cannot exercise the BT or recording
+flow. Desktop platforms (windows, macos, linux) were removed; add back with
+`flutter create --platforms=windows .` (from inside `app/`) if ever needed.
+
 ## Design Docs
 
 Maintain a `docs/design/` folder alongside the code. This is where product and

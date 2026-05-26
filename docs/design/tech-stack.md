@@ -21,8 +21,10 @@ browser URLs on web, and nested routes when needed.
 Use **Drift** with **SQLite** for local app data. Drift provides type-safe
 queries, migrations, streams, and strong offline-first behavior.
 
-Use **sqlite3_flutter_libs** for native SQLite support. It bundles reliable
-SQLite support for mobile and desktop targets.
+Use **drift_flutter** to open the database. It handles native SQLite bundling
+and platform-specific file locations through `driftDatabase(name: ...)`. The
+older `sqlite3_flutter_libs` package is now a no-op shim and is not needed
+directly — `package:sqlite3` 3.x bundles native libs itself.
 
 Use Drift's web backend when the app targets browsers. This keeps the same
 database layer across mobile and web.
@@ -39,8 +41,12 @@ from one standard tool.
 Use **flutter_test** for unit and widget tests. It is the default test
 foundation for Flutter apps.
 
-Use **flutter_lints**, **custom_lint**, and **riverpod_lint** for static
-analysis. They keep common mistakes out of reviews, especially provider misuse.
+Use **flutter_lints** for static analysis by default. The Riverpod-specific
+lint plugins (`riverpod_lint` + `custom_lint`) are desirable but their
+analyzer pin currently conflicts with `drift_dev`'s analyzer pin on any
+Riverpod version — both can't coexist until the ecosystem realigns. Add
+them later as a focused change. `flutter_lints` covers the common cases
+until then.
 
 ## Persistence
 
