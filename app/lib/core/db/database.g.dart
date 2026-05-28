@@ -37,9 +37,9 @@ class $AthletesTable extends Athletes with TableInfo<$AthletesTable, Athlete> {
   late final GeneratedColumn<int> restingHeartrate = GeneratedColumn<int>(
     'resting_heartrate',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.int,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _maxHeartrateMeta = const VerificationMeta(
     'maxHeartrate',
@@ -48,9 +48,9 @@ class $AthletesTable extends Athletes with TableInfo<$AthletesTable, Athlete> {
   late final GeneratedColumn<int> maxHeartrate = GeneratedColumn<int>(
     'max_heartrate',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.int,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _createdAtMsMeta = const VerificationMeta(
     'createdAtMs',
@@ -102,8 +102,6 @@ class $AthletesTable extends Athletes with TableInfo<$AthletesTable, Athlete> {
           _restingHeartrateMeta,
         ),
       );
-    } else if (isInserting) {
-      context.missing(_restingHeartrateMeta);
     }
     if (data.containsKey('max_heartrate')) {
       context.handle(
@@ -113,8 +111,6 @@ class $AthletesTable extends Athletes with TableInfo<$AthletesTable, Athlete> {
           _maxHeartrateMeta,
         ),
       );
-    } else if (isInserting) {
-      context.missing(_maxHeartrateMeta);
     }
     if (data.containsKey('created_at_ms')) {
       context.handle(
@@ -147,11 +143,11 @@ class $AthletesTable extends Athletes with TableInfo<$AthletesTable, Athlete> {
       restingHeartrate: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}resting_heartrate'],
-      )!,
+      ),
       maxHeartrate: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}max_heartrate'],
-      )!,
+      ),
       createdAtMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_at_ms'],
@@ -168,14 +164,14 @@ class $AthletesTable extends Athletes with TableInfo<$AthletesTable, Athlete> {
 class Athlete extends DataClass implements Insertable<Athlete> {
   final int id;
   final String name;
-  final int restingHeartrate;
-  final int maxHeartrate;
+  final int? restingHeartrate;
+  final int? maxHeartrate;
   final int createdAtMs;
   const Athlete({
     required this.id,
     required this.name,
-    required this.restingHeartrate,
-    required this.maxHeartrate,
+    this.restingHeartrate,
+    this.maxHeartrate,
     required this.createdAtMs,
   });
   @override
@@ -183,8 +179,12 @@ class Athlete extends DataClass implements Insertable<Athlete> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
-    map['resting_heartrate'] = Variable<int>(restingHeartrate);
-    map['max_heartrate'] = Variable<int>(maxHeartrate);
+    if (!nullToAbsent || restingHeartrate != null) {
+      map['resting_heartrate'] = Variable<int>(restingHeartrate);
+    }
+    if (!nullToAbsent || maxHeartrate != null) {
+      map['max_heartrate'] = Variable<int>(maxHeartrate);
+    }
     map['created_at_ms'] = Variable<int>(createdAtMs);
     return map;
   }
@@ -193,8 +193,12 @@ class Athlete extends DataClass implements Insertable<Athlete> {
     return AthletesCompanion(
       id: Value(id),
       name: Value(name),
-      restingHeartrate: Value(restingHeartrate),
-      maxHeartrate: Value(maxHeartrate),
+      restingHeartrate: restingHeartrate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(restingHeartrate),
+      maxHeartrate: maxHeartrate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxHeartrate),
       createdAtMs: Value(createdAtMs),
     );
   }
@@ -207,8 +211,8 @@ class Athlete extends DataClass implements Insertable<Athlete> {
     return Athlete(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
-      restingHeartrate: serializer.fromJson<int>(json['restingHeartrate']),
-      maxHeartrate: serializer.fromJson<int>(json['maxHeartrate']),
+      restingHeartrate: serializer.fromJson<int?>(json['restingHeartrate']),
+      maxHeartrate: serializer.fromJson<int?>(json['maxHeartrate']),
       createdAtMs: serializer.fromJson<int>(json['createdAtMs']),
     );
   }
@@ -218,8 +222,8 @@ class Athlete extends DataClass implements Insertable<Athlete> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
-      'restingHeartrate': serializer.toJson<int>(restingHeartrate),
-      'maxHeartrate': serializer.toJson<int>(maxHeartrate),
+      'restingHeartrate': serializer.toJson<int?>(restingHeartrate),
+      'maxHeartrate': serializer.toJson<int?>(maxHeartrate),
       'createdAtMs': serializer.toJson<int>(createdAtMs),
     };
   }
@@ -227,14 +231,16 @@ class Athlete extends DataClass implements Insertable<Athlete> {
   Athlete copyWith({
     int? id,
     String? name,
-    int? restingHeartrate,
-    int? maxHeartrate,
+    Value<int?> restingHeartrate = const Value.absent(),
+    Value<int?> maxHeartrate = const Value.absent(),
     int? createdAtMs,
   }) => Athlete(
     id: id ?? this.id,
     name: name ?? this.name,
-    restingHeartrate: restingHeartrate ?? this.restingHeartrate,
-    maxHeartrate: maxHeartrate ?? this.maxHeartrate,
+    restingHeartrate: restingHeartrate.present
+        ? restingHeartrate.value
+        : this.restingHeartrate,
+    maxHeartrate: maxHeartrate.present ? maxHeartrate.value : this.maxHeartrate,
     createdAtMs: createdAtMs ?? this.createdAtMs,
   );
   Athlete copyWithCompanion(AthletesCompanion data) {
@@ -282,8 +288,8 @@ class Athlete extends DataClass implements Insertable<Athlete> {
 class AthletesCompanion extends UpdateCompanion<Athlete> {
   final Value<int> id;
   final Value<String> name;
-  final Value<int> restingHeartrate;
-  final Value<int> maxHeartrate;
+  final Value<int?> restingHeartrate;
+  final Value<int?> maxHeartrate;
   final Value<int> createdAtMs;
   const AthletesCompanion({
     this.id = const Value.absent(),
@@ -295,12 +301,10 @@ class AthletesCompanion extends UpdateCompanion<Athlete> {
   AthletesCompanion.insert({
     this.id = const Value.absent(),
     required String name,
-    required int restingHeartrate,
-    required int maxHeartrate,
+    this.restingHeartrate = const Value.absent(),
+    this.maxHeartrate = const Value.absent(),
     required int createdAtMs,
   }) : name = Value(name),
-       restingHeartrate = Value(restingHeartrate),
-       maxHeartrate = Value(maxHeartrate),
        createdAtMs = Value(createdAtMs);
   static Insertable<Athlete> custom({
     Expression<int>? id,
@@ -321,8 +325,8 @@ class AthletesCompanion extends UpdateCompanion<Athlete> {
   AthletesCompanion copyWith({
     Value<int>? id,
     Value<String>? name,
-    Value<int>? restingHeartrate,
-    Value<int>? maxHeartrate,
+    Value<int?>? restingHeartrate,
+    Value<int?>? maxHeartrate,
     Value<int>? createdAtMs,
   }) {
     return AthletesCompanion(
@@ -2142,16 +2146,16 @@ typedef $$AthletesTableCreateCompanionBuilder =
     AthletesCompanion Function({
       Value<int> id,
       required String name,
-      required int restingHeartrate,
-      required int maxHeartrate,
+      Value<int?> restingHeartrate,
+      Value<int?> maxHeartrate,
       required int createdAtMs,
     });
 typedef $$AthletesTableUpdateCompanionBuilder =
     AthletesCompanion Function({
       Value<int> id,
       Value<String> name,
-      Value<int> restingHeartrate,
-      Value<int> maxHeartrate,
+      Value<int?> restingHeartrate,
+      Value<int?> maxHeartrate,
       Value<int> createdAtMs,
     });
 
@@ -2286,8 +2290,8 @@ class $$AthletesTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
-                Value<int> restingHeartrate = const Value.absent(),
-                Value<int> maxHeartrate = const Value.absent(),
+                Value<int?> restingHeartrate = const Value.absent(),
+                Value<int?> maxHeartrate = const Value.absent(),
                 Value<int> createdAtMs = const Value.absent(),
               }) => AthletesCompanion(
                 id: id,
@@ -2300,8 +2304,8 @@ class $$AthletesTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required String name,
-                required int restingHeartrate,
-                required int maxHeartrate,
+                Value<int?> restingHeartrate = const Value.absent(),
+                Value<int?> maxHeartrate = const Value.absent(),
                 required int createdAtMs,
               }) => AthletesCompanion.insert(
                 id: id,

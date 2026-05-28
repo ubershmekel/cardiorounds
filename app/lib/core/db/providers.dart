@@ -12,3 +12,13 @@ final startupProvider = FutureProvider<void>((ref) async {
   final db = ref.watch(databaseProvider);
   await db.ensureDefaultAthlete();
 });
+
+final defaultAthleteProvider = StreamProvider<Athlete>((ref) {
+  final db = ref.watch(databaseProvider);
+  return db.watchDefaultAthlete();
+});
+
+final activitiesProvider = StreamProvider<List<Activity>>((ref) {
+  final db = ref.watch(databaseProvider);
+  return db.watchActivities();
+});

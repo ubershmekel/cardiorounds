@@ -6,8 +6,8 @@ How we store, and query data to make the app reliable and fast.
 CREATE TABLE athletes (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
-  resting_heartrate INTEGER NOT NULL,
-  max_heartrate INTEGER NOT NULL,
+  resting_heartrate INTEGER,        -- NULL until the user sets it
+  max_heartrate INTEGER,            -- NULL until the user sets it; zone colors stay locked while NULL
   created_at_ms INTEGER NOT NULL
 );
 
