@@ -158,9 +158,7 @@ class _ActivityRow extends StatelessWidget {
     return ListTile(
       title: Text(activity.name ?? activity.sportType ?? 'Workout'),
       subtitle: Text(subtitle),
-      onTap: () {
-        // future: open review screen for this activity
-      },
+      onTap: () => context.go('/activity/${activity.id}'),
     );
   }
 }

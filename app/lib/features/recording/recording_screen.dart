@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/db/providers.dart';
+import '../activity/hr_chart.dart';
+import '../activity/hr_stats.dart';
+import '../activity/hr_stats_row.dart';
 import 'recording_controller.dart';
+
+const int _liveWindowMs = 5 * 60 * 1000;
 
 class RecordingScreen extends ConsumerWidget {
   const RecordingScreen({super.key, required this.activityId});
@@ -19,16 +25,42 @@ class RecordingScreen extends ConsumerWidget {
   }
 
   Future<void> _onStop(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Stop recording?'),
+        content: const Text('This ends the workout and saves it.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Keep recording'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Stop'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     await ref.read(recordingControllerProvider(activityId).notifier).stop();
     if (!context.mounted) return;
-    context.go('/home');
+    context.go('/activity/$activityId');
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(recordingControllerProvider(activityId));
+    final samples = ref.watch(samplesProvider(activityId)).valueOrNull ?? [];
     final scheme = Theme.of(context).colorScheme;
     final bpmText = state.currentBpm?.toString() ?? '--';
+
+    final stats = HrStats.fromHeartRates(samples.map((r) => r.hr));
+    final axis = HrAxisRange.forStats(minHr: stats.min, maxHr: stats.max);
+    final points =
+        samples.map((r) => HrChartPoint(tMs: r.tMs, hr: r.hr)).toList();
+    final latestMs = points.isEmpty ? 0 : points.last.tMs;
+    final windowStart = latestMs > _liveWindowMs ? latestMs - _liveWindowMs : 0;
 
     return PopScope(
       canPop: false,
@@ -37,47 +69,67 @@ class RecordingScreen extends ConsumerWidget {
           title: Text(state.deviceName),
           automaticallyImplyLeading: false,
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 24),
-              Center(
-                child: Text(
-                  bpmText,
-                  style: TextStyle(
-                    fontSize: 128,
-                    fontWeight: FontWeight.w600,
-                    color: scheme.error,
-                    height: 1.0,
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        bpmText,
+                        style: TextStyle(
+                          fontSize: 88,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.error,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('bpm',
+                          style: Theme.of(context).textTheme.titleMedium),
+                    ],
                   ),
-                ),
-              ),
-              Center(
-                child: Text('bpm',
-                    style: Theme.of(context).textTheme.titleMedium),
-              ),
-              const SizedBox(height: 32),
-              Center(
-                child: Text(
-                  _formatElapsed(state.elapsed),
-                  style: Theme.of(context).textTheme.displaySmall,
-                ),
-              ),
-              const Spacer(),
-              FilledButton.tonalIcon(
-                onPressed: state.stopped ? null : () => _onStop(context, ref),
-                icon: const Icon(Icons.stop_circle_outlined),
-                label: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    state.stopped ? 'Stopping…' : 'Stop',
-                    style: Theme.of(context).textTheme.titleLarge,
+                  Center(
+                    child: Text(
+                      _formatElapsed(state.elapsed),
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: HrChart(
+                      points: points,
+                      axis: axis,
+                      windowStartMs: windowStart,
+                      windowEndMs: latestMs,
+                      lineColor: scheme.error,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  HrStatsRow(stats: stats),
+                  const SizedBox(height: 16),
+                  FilledButton.tonalIcon(
+                    onPressed:
+                        state.stopped ? null : () => _onStop(context, ref),
+                    icon: const Icon(Icons.stop_circle_outlined),
+                    label: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        state.stopped ? 'Stopping…' : 'Stop',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

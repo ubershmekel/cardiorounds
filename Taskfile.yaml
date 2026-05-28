@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: "3"
+
+tasks:
+  run-android:
+    desc: Run the app in debug mode on Android
+    dir: app
+    cmds:
+      - flutter run -d emulator
+  run-chrome:
+    desc: Run the app in debug mode on Chrome
+    dir: app
+    cmds:
+      - flutter run -d chrome
+  run-chrome-release:
+    desc: Run the app in release mode
+    dir: app
+    cmds:
+      - flutter run --release -d chrome
+  build-web:
+    desc: Build web with version info
+    dir: app
+    cmds:
+      - flutter build web --release --base-href /didit/
+        --dart-define="APP_VERSION=$(git rev-parse --short HEAD) ($(git log -1
+        --format=%cd --date=format:'%Y-%m-%d'))"
+  build-android:
+    desc: Build Android App Bundle with version info
+    dir: app
+    cmds:
+      - flutter build appbundle --release --dart-define="APP_VERSION=$(git
+        rev-parse --short HEAD) ($(git log -1 --format=%cd
+        --date=format:'%Y-%m-%d'))"
+  build-ios:
+    desc: Build iOS IPA with version info
+    dir: app
+    cmds:
+      - flutter build ipa --release --dart-define="APP_VERSION=$(git rev-parse
+        --short HEAD) ($(git log -1 --format=%cd --date=format:'%Y-%m-%d'))"
+  test:
+    desc: Run all tests
+    dir: app
+    cmds:
+      - flutter test
+  format:
+    desc: Format Dart code and Prettier-supported project files
+    cmds:
+      - dart format app
+      - npx prettier --write .
+  bump:
+    desc:
+      Auto-increment the build number in pubspec.yaml (e.g. 1.0.0+3 -> 1.0.0+4)
+    vars:
+      NAME:
+        sh:
+          'grep "^version:" app/pubspec.yaml | sed "s/version: //" | cut -d+ -f1'
+      NEW_BUILD:
+        sh:
+          'echo $(($(grep "^version:" app/pubspec.yaml | sed "s/version: //" |
+          cut -d+ -f2) + 1))'
+    cmds:
+      - 'sed -i "s/^version:.*/version: {{.NAME}}+{{.NEW_BUILD}}/"
+        app/pubspec.yaml'
+      - 'echo "Bumped to {{.NAME}}+{{.NEW_BUILD}}"'
+  gen-art:
+    desc: Generate all platform icons and splash screens from logo source files
+    dir: app
+    cmds:
+      - dart run flutter_launcher_icons
+      - dart run flutter_native_splash:create

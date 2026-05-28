@@ -62,6 +62,18 @@ class AppDatabase extends _$AppDatabase {
         .watch();
   }
 
+  Stream<Activity> watchActivity(int activityId) {
+    return (select(activities)..where((a) => a.id.equals(activityId)))
+        .watchSingle();
+  }
+
+  Stream<List<SampleRow>> watchSamples(int activityId) {
+    return (select(samples)
+          ..where((s) => s.activityId.equals(activityId))
+          ..orderBy([(s) => OrderingTerm.asc(s.tMs)]))
+        .watch();
+  }
+
   Future<int> startActivity({
     required int athleteId,
     required int startedAtMs,
@@ -103,6 +115,35 @@ class AppDatabase extends _$AppDatabase {
         hr: Value(hr),
       ),
     );
+  }
+
+  Stream<Marker?> watchWorkoutMarker(int activityId) {
+    return (select(markers)
+          ..where((m) => m.activityId.equals(activityId) & m.kind.equals('workout'))
+          ..limit(1))
+        .watchSingleOrNull();
+  }
+
+  /// Inserts or replaces the single `workout` span marker for an activity.
+  Future<void> upsertWorkoutMarker({
+    required int activityId,
+    required int tMs,
+    required int durationMs,
+  }) {
+    return transaction(() async {
+      await (delete(markers)
+            ..where((m) =>
+                m.activityId.equals(activityId) & m.kind.equals('workout')))
+          .go();
+      await into(markers).insert(
+        MarkersCompanion.insert(
+          activityId: activityId,
+          tMs: tMs,
+          kind: 'workout',
+          durationMs: Value(durationMs),
+        ),
+      );
+    });
   }
 }
 
