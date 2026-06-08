@@ -93,8 +93,9 @@ class HrChart extends StatelessWidget {
       return Center(
         child: Text(
           'No heart-rate data',
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: scheme.onSurfaceVariant),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -113,8 +114,9 @@ class HrChart extends StatelessWidget {
         gridColor: scheme.outlineVariant,
         scrimColor: scheme.surface.withValues(alpha: 0.66),
         handleColor: scheme.primary,
-        labelStyle: theme.textTheme.labelSmall!
-            .copyWith(color: scheme.onSurfaceVariant),
+        labelStyle: theme.textTheme.labelSmall!.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
         workoutStartMs: workoutStartMs,
         workoutEndMs: workoutEndMs,
         showHandles: showHandles,
@@ -165,23 +167,40 @@ class HrChartPainter extends CustomPainter {
     );
     if (g.plotWidth <= 0 || g.plotHeight <= 0) return;
 
-    // Horizontal gridlines + Y labels at floor, middle, ceiling.
+    // Subtle horizontal gridlines every 10 bpm, with sparse Y labels.
     final gridPaint = Paint()
-      ..color = gridColor
-      ..strokeWidth = 1;
-    final mid = (axis.minY + axis.maxY) ~/ 2;
-    for (final bpm in {axis.minY, mid, axis.maxY}) {
+      ..color = gridColor.withValues(alpha: 0.55)
+      ..strokeWidth = 0.75;
+    final mid = (((axis.minY + axis.maxY) / 2) / 10).round() * 10;
+    final labelBpms = {axis.minY, mid, axis.maxY};
+    final firstGridBpm = ((axis.minY + 9) ~/ 10) * 10;
+    final lastGridBpm = (axis.maxY ~/ 10) * 10;
+    for (var bpm = firstGridBpm; bpm <= lastGridBpm; bpm += 10) {
       final y = g.yForHr(bpm);
-      canvas.drawLine(
-          Offset(g.plotLeft, y), Offset(g.plotRight, y), gridPaint);
-      _paintLabel(canvas, '$bpm', Offset(g.plotLeft - 4, y), alignRight: true);
+      canvas.drawLine(Offset(g.plotLeft, y), Offset(g.plotRight, y), gridPaint);
+      if (labelBpms.contains(bpm)) {
+        _paintLabel(
+          canvas,
+          '$bpm',
+          Offset(g.plotLeft - 4, y),
+          alignRight: true,
+        );
+      }
     }
 
     // X labels at the window start and end (elapsed mm:ss from recording start).
-    _paintLabel(canvas, _elapsed(startMs), Offset(g.plotLeft, g.plotBottom + 2),
-        alignRight: false);
-    _paintLabel(canvas, _elapsed(endMs), Offset(g.plotRight, g.plotBottom + 2),
-        alignRight: true);
+    _paintLabel(
+      canvas,
+      _elapsed(startMs),
+      Offset(g.plotLeft, g.plotBottom + 2),
+      alignRight: false,
+    );
+    _paintLabel(
+      canvas,
+      _elapsed(endMs),
+      Offset(g.plotRight, g.plotBottom + 2),
+      alignRight: true,
+    );
 
     _paintLine(canvas, g);
     _paintWorkoutWindow(canvas, g);
@@ -272,13 +291,20 @@ class HrChartPainter extends CustomPainter {
       ..strokeWidth = 2;
     for (final x in [xs, xe]) {
       canvas.drawLine(
-          Offset(x, g.plotTop), Offset(x, g.plotBottom), handlePaint);
+        Offset(x, g.plotTop),
+        Offset(x, g.plotBottom),
+        handlePaint,
+      );
       canvas.drawCircle(Offset(x, g.plotTop + 6), 7, handlePaint);
     }
   }
 
-  void _paintLabel(Canvas canvas, String text, Offset anchor,
-      {required bool alignRight}) {
+  void _paintLabel(
+    Canvas canvas,
+    String text,
+    Offset anchor, {
+    required bool alignRight,
+  }) {
     final tp = TextPainter(
       text: TextSpan(text: text, style: labelStyle),
       textDirection: TextDirection.ltr,
@@ -395,12 +421,13 @@ class _ZoomableHrChartState extends State<ZoomableHrChart> {
     // current focal screen position. Works for pinch, pan, and a mix of both.
     final focalT = _g0FocalT!;
     final focalX = d.localFocalPoint.dx;
-    final desiredStart =
-        focalT - (focalX - plotLeft) * newSpan / plotWidth;
+    final desiredStart = focalT - (focalX - plotLeft) * newSpan / plotWidth;
 
     final maxStart = widget.fullEndMs - newSpan;
-    final clampedStart =
-        desiredStart.round().clamp(widget.fullStartMs, maxStart);
+    final clampedStart = desiredStart.round().clamp(
+      widget.fullStartMs,
+      maxStart,
+    );
 
     setState(() {
       _start = clampedStart;
@@ -456,10 +483,9 @@ class _ZoomableHrChartState extends State<ZoomableHrChart> {
                   icon: const Icon(Icons.zoom_out_map),
                   onPressed: _resetZoom,
                   style: IconButton.styleFrom(
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .surface
-                        .withValues(alpha: 0.7),
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.surface.withValues(alpha: 0.7),
                   ),
                 ),
               ),
@@ -519,11 +545,11 @@ class _EditableHrChartState extends State<EditableHrChart> {
   }
 
   HrChartGeometry _geometry(Size size) => HrChartGeometry(
-        size: size,
-        startMs: widget.windowStartMs,
-        endMs: widget.windowEndMs,
-        axis: widget.axis,
-      );
+    size: size,
+    startMs: widget.windowStartMs,
+    endMs: widget.windowEndMs,
+    axis: widget.axis,
+  );
 
   void _onPanStart(DragStartDetails d, Size size) {
     final g = _geometry(size);
