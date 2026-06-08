@@ -17,6 +17,14 @@ void main() {
       expect(stats.sampleCount, 0);
     });
 
+    test('non-positive input is treated as missing data', () {
+      final stats = HrStats.fromHeartRates(const [0, -1, null, 120]);
+      expect(stats.min, 120);
+      expect(stats.max, 120);
+      expect(stats.avg, 120);
+      expect(stats.sampleCount, 1);
+    });
+
     test('computes min/avg/max over non-null values', () {
       final stats = HrStats.fromHeartRates(const [100, 120, 140]);
       expect(stats.min, 100);
@@ -36,6 +44,37 @@ void main() {
     test('rounds the average to the nearest integer', () {
       final stats = HrStats.fromHeartRates(const [100, 101]);
       expect(stats.avg, 101);
+    });
+  });
+
+  group('HrStats.fromTimedHeartRates', () {
+    test('computes stats over samples inside the inclusive time window', () {
+      final stats = HrStats.fromTimedHeartRates(
+        const [
+          (tMs: 0, hr: 0),
+          (tMs: 1000, hr: 100),
+          (tMs: 2000, hr: 140),
+          (tMs: 3000, hr: 180),
+        ],
+        windowStartMs: 1000,
+        windowEndMs: 2000,
+      );
+
+      expect(stats.min, 100);
+      expect(stats.max, 140);
+      expect(stats.avg, 120);
+      expect(stats.sampleCount, 2);
+    });
+
+    test('returns empty stats when the window has no valid heart rates', () {
+      final stats = HrStats.fromTimedHeartRates(
+        const [(tMs: 0, hr: 120), (tMs: 1000, hr: 0), (tMs: 2000, hr: null)],
+        windowStartMs: 1000,
+        windowEndMs: 2000,
+      );
+
+      expect(stats.isEmpty, isTrue);
+      expect(stats.sampleCount, 0);
     });
   });
 

@@ -11,14 +11,14 @@ class HrStats {
 
   bool get isEmpty => sampleCount == 0;
 
-  /// Computes min/avg/max over the non-null heart-rate values.
+  /// Computes min/avg/max over the positive heart-rate values.
   static HrStats fromHeartRates(Iterable<int?> heartRates) {
     int? min;
     int? max;
     var sum = 0;
     var count = 0;
     for (final hr in heartRates) {
-      if (hr == null) continue;
+      if (hr == null || hr <= 0) continue;
       if (min == null || hr < min) min = hr;
       if (max == null || hr > max) max = hr;
       sum += hr;
@@ -30,6 +30,28 @@ class HrStats {
       max: max,
       avg: (sum / count).round(),
       sampleCount: count,
+    );
+  }
+
+  /// Computes min/avg/max over positive heart-rate samples inside an optional
+  /// elapsed-time window. The window bounds are inclusive.
+  static HrStats fromTimedHeartRates(
+    Iterable<({int tMs, int? hr})> samples, {
+    int? windowStartMs,
+    int? windowEndMs,
+  }) {
+    return fromHeartRates(
+      samples
+          .where((sample) {
+            if (windowStartMs != null && sample.tMs < windowStartMs) {
+              return false;
+            }
+            if (windowEndMs != null && sample.tMs > windowEndMs) {
+              return false;
+            }
+            return true;
+          })
+          .map((sample) => sample.hr),
     );
   }
 }

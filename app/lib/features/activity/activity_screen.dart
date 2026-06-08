@@ -127,8 +127,17 @@ class _ActivityBody extends StatelessWidget {
         ? null
         : marker.tMs + (marker.durationMs ?? 0);
 
-    final stats = HrStats.fromHeartRates(rows.map((r) => r.hr));
-    final axis = HrAxisRange.forStats(minHr: stats.min, maxHr: stats.max);
+    final timedHeartRates = rows.map((r) => (tMs: r.tMs, hr: r.hr));
+    final stats = HrStats.fromTimedHeartRates(
+      timedHeartRates,
+      windowStartMs: workoutStart,
+      windowEndMs: workoutEnd,
+    );
+    final chartStats = HrStats.fromHeartRates(rows.map((r) => r.hr));
+    final axis = HrAxisRange.forStats(
+      minHr: chartStats.min,
+      maxHr: chartStats.max,
+    );
     final points = rows.map((r) => HrChartPoint(tMs: r.tMs, hr: r.hr)).toList();
     final zoneTimes = zoneSetup == null
         ? null
