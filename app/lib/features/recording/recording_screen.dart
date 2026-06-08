@@ -65,8 +65,12 @@ class RecordingScreen extends ConsumerWidget {
 
     final stats = HrStats.fromHeartRates(samples.map((r) => r.hr));
     final axis = HrAxisRange.forStats(minHr: stats.min, maxHr: stats.max);
-    final points =
-        samples.map((r) => HrChartPoint(tMs: r.tMs, hr: r.hr)).toList();
+    final points = samples
+        .map((r) => HrChartPoint(tMs: r.tMs, hr: r.hr))
+        .toList();
+    final zoneTimes = zoneSetup == null
+        ? null
+        : computeZoneTimes(samples, zoneSetup);
     final latestMs = points.isEmpty ? 0 : points.last.tMs;
     final windowStart = latestMs > _liveWindowMs ? latestMs - _liveWindowMs : 0;
 
@@ -100,8 +104,10 @@ class RecordingScreen extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text('bpm',
-                          style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'bpm',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ],
                   ),
                   Center(
@@ -123,17 +129,15 @@ class RecordingScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   HrStatsRow(stats: stats),
-                  const SizedBox(height: 16),
                   if (zoneSetup != null) ...[
-                    ZoneBreakdown(
-                      setup: zoneSetup,
-                      times: computeZoneTimes(samples, zoneSetup),
-                    ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
+                    ZoneBreakdown(setup: zoneSetup, times: zoneTimes!),
                   ],
+                  const SizedBox(height: 16),
                   FilledButton.tonalIcon(
-                    onPressed:
-                        state.stopped ? null : () => _onStop(context, ref),
+                    onPressed: state.stopped
+                        ? null
+                        : () => _onStop(context, ref),
                     icon: const Icon(Icons.stop_circle_outlined),
                     label: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),

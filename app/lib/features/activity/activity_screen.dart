@@ -39,10 +39,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => context.go('/home')),
-        title: Text(activity.maybeWhen(
-          data: (a) => a.name ?? a.sportType ?? 'Workout',
-          orElse: () => 'Workout',
-        )),
+        title: Text(
+          activity.maybeWhen(
+            data: (a) => a.name ?? a.sportType ?? 'Workout',
+            orElse: () => 'Workout',
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: _editing ? 'Done' : 'Edit workout window',
@@ -65,7 +67,9 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             zoneSetup: zoneSetup,
             onOpenSettings: () => context.go('/settings'),
             onWorkoutChanged: (start, end) {
-              ref.read(databaseProvider).upsertWorkoutMarker(
+              ref
+                  .read(databaseProvider)
+                  .upsertWorkoutMarker(
                     activityId: widget.activityId,
                     tMs: start,
                     durationMs: end - start,
@@ -116,14 +120,24 @@ class _ActivityBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final stats = HrStats.fromHeartRates(rows.map((r) => r.hr));
-    final axis = HrAxisRange.forStats(minHr: stats.min, maxHr: stats.max);
-    final points =
-        rows.map((r) => HrChartPoint(tMs: r.tMs, hr: r.hr)).toList();
 
     final marker = workoutMarker;
     final workoutStart = marker?.tMs;
-    final workoutEnd = marker == null ? null : marker.tMs + (marker.durationMs ?? 0);
+    final workoutEnd = marker == null
+        ? null
+        : marker.tMs + (marker.durationMs ?? 0);
+
+    final stats = HrStats.fromHeartRates(rows.map((r) => r.hr));
+    final axis = HrAxisRange.forStats(minHr: stats.min, maxHr: stats.max);
+    final points = rows.map((r) => HrChartPoint(tMs: r.tMs, hr: r.hr)).toList();
+    final zoneTimes = zoneSetup == null
+        ? null
+        : computeZoneTimes(
+            rows,
+            zoneSetup!,
+            windowStartMs: workoutStart,
+            windowEndMs: workoutEnd,
+          );
 
     final meta = [
       _formatDate(activity.startedAtMs),
@@ -139,9 +153,12 @@ class _ActivityBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(meta,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text(
+                meta,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
               const SizedBox(height: 16),
               Expanded(
                 child: editing
@@ -170,8 +187,9 @@ class _ActivityBody extends StatelessWidget {
                   child: Text(
                     'Drag the handles to set the workout window.',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               const SizedBox(height: 16),
@@ -180,15 +198,7 @@ class _ActivityBody extends StatelessWidget {
               if (zoneSetup == null)
                 ZoneLockedPrompt(onTap: onOpenSettings)
               else
-                ZoneBreakdown(
-                  setup: zoneSetup!,
-                  times: computeZoneTimes(
-                    rows,
-                    zoneSetup!,
-                    windowStartMs: workoutStart,
-                    windowEndMs: workoutEnd,
-                  ),
-                ),
+                ZoneBreakdown(setup: zoneSetup!, times: zoneTimes!),
             ],
           ),
         ),
