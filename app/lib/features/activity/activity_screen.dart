@@ -4,9 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
+import '../../core/zones/zone_times.dart';
+import '../../core/zones/zones.dart';
 import 'hr_chart.dart';
 import 'hr_stats.dart';
 import 'hr_stats_row.dart';
+import 'zone_breakdown.dart';
 
 /// Read-only review of a completed activity: full HR chart and summary stats.
 /// Tapping "edit" makes the `workout` span handles draggable on the chart.
@@ -27,6 +30,11 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     final activity = ref.watch(activityProvider(widget.activityId));
     final samples = ref.watch(samplesProvider(widget.activityId));
     final marker = ref.watch(workoutMarkerProvider(widget.activityId));
+    final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
+    final zoneSetup = zoneSetupFor(
+      maxHr: athlete?.maxHeartrate,
+      restingHr: athlete?.restingHeartrate,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -54,6 +62,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             rows: rows,
             workoutMarker: marker.valueOrNull,
             editing: _editing,
+            zoneSetup: zoneSetup,
+            onOpenSettings: () => context.go('/settings'),
             onWorkoutChanged: (start, end) {
               ref.read(databaseProvider).upsertWorkoutMarker(
                     activityId: widget.activityId,
@@ -74,6 +84,8 @@ class _ActivityBody extends StatelessWidget {
     required this.rows,
     required this.workoutMarker,
     required this.editing,
+    required this.zoneSetup,
+    required this.onOpenSettings,
     required this.onWorkoutChanged,
   });
 
@@ -81,6 +93,8 @@ class _ActivityBody extends StatelessWidget {
   final List<SampleRow> rows;
   final Marker? workoutMarker;
   final bool editing;
+  final ZoneSetup? zoneSetup;
+  final VoidCallback onOpenSettings;
   final void Function(int startMs, int endMs) onWorkoutChanged;
 
   String _formatDuration(int ms) {
@@ -140,11 +154,11 @@ class _ActivityBody extends StatelessWidget {
                         workoutEndMs: workoutEnd ?? activity.durationMs,
                         onChanged: onWorkoutChanged,
                       )
-                    : HrChart(
+                    : ZoomableHrChart(
                         points: points,
                         axis: axis,
-                        windowStartMs: 0,
-                        windowEndMs: activity.durationMs,
+                        fullStartMs: 0,
+                        fullEndMs: activity.durationMs,
                         workoutStartMs: workoutStart,
                         workoutEndMs: workoutEnd,
                       ),
@@ -161,6 +175,18 @@ class _ActivityBody extends StatelessWidget {
                 ),
               const SizedBox(height: 16),
               HrStatsRow(stats: stats),
+              const SizedBox(height: 24),
+              if (zoneSetup == null)
+                ZoneLockedPrompt(onTap: onOpenSettings)
+              else
+                ZoneBreakdown(
+                  times: computeZoneTimes(
+                    rows,
+                    zoneSetup!,
+                    windowStartMs: workoutStart,
+                    windowEndMs: workoutEnd,
+                  ),
+                ),
             ],
           ),
         ),

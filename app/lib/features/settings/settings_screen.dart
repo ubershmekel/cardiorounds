@@ -66,9 +66,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
     final restingText = _restingHrController.text.trim();
     await db.updateAthlete(
       id: widget.athlete.id,
-      name: _nameController.text.trim().isEmpty
-          ? 'Athlete'
-          : _nameController.text.trim(),
+      name: _nameController.text.trim(),
       maxHeartrate: maxText.isEmpty ? null : int.tryParse(maxText),
       clearMax: maxText.isEmpty,
       restingHeartrate: restingText.isEmpty ? null : int.tryParse(restingText),
@@ -102,6 +100,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           controller: _nameController,
           decoration: const InputDecoration(
             labelText: 'Name',
+            hintText: 'Your name (optional)',
             border: OutlineInputBorder(),
           ),
         ),

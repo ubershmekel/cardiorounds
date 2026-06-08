@@ -20,7 +20,7 @@ class AppDatabase extends _$AppDatabase {
     if (existing != null) return existing;
     final id = await into(athletes).insert(
       AthletesCompanion.insert(
-        name: 'Athlete',
+        name: '',
         createdAtMs: DateTime.now().millisecondsSinceEpoch,
       ),
     );

@@ -273,6 +273,163 @@ class HrChartPainter extends CustomPainter {
   }
 }
 
+/// Wraps [HrChart] with pinch-to-zoom and one-finger pan. Used on the review
+/// screen so the user can drill into a specific part of a long workout.
+/// The chart's own painter is unchanged; this widget only adjusts the visible
+/// window passed to it.
+class ZoomableHrChart extends StatefulWidget {
+  const ZoomableHrChart({
+    super.key,
+    required this.points,
+    required this.axis,
+    required this.fullStartMs,
+    required this.fullEndMs,
+    this.lineColor,
+    this.workoutStartMs,
+    this.workoutEndMs,
+    this.minSpanMs = 5000,
+  });
+
+  final List<HrChartPoint> points;
+  final HrAxisRange axis;
+  final int fullStartMs;
+  final int fullEndMs;
+  final Color? lineColor;
+  final int? workoutStartMs;
+  final int? workoutEndMs;
+  final int minSpanMs;
+
+  @override
+  State<ZoomableHrChart> createState() => _ZoomableHrChartState();
+}
+
+class _ZoomableHrChartState extends State<ZoomableHrChart> {
+  late int _start = widget.fullStartMs;
+  late int _end = widget.fullEndMs;
+
+  // Snapshot at the start of a scale gesture so cumulative `scale` is honored.
+  int? _g0Start;
+  int? _g0End;
+  double? _g0FocalT;
+
+  @override
+  void didUpdateWidget(ZoomableHrChart old) {
+    super.didUpdateWidget(old);
+    // If the underlying activity changes length, reset the visible window.
+    if (old.fullStartMs != widget.fullStartMs ||
+        old.fullEndMs != widget.fullEndMs) {
+      _start = widget.fullStartMs;
+      _end = widget.fullEndMs;
+    }
+  }
+
+  HrChartGeometry _geometry(Size size, int startMs, int endMs) =>
+      HrChartGeometry(
+        size: size,
+        startMs: startMs,
+        endMs: endMs,
+        axis: widget.axis,
+      );
+
+  void _onScaleStart(ScaleStartDetails d, Size size) {
+    _g0Start = _start;
+    _g0End = _end;
+    final g = _geometry(size, _start, _end);
+    _g0FocalT = g.tForX(d.localFocalPoint.dx).toDouble();
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails d, Size size) {
+    if (_g0Start == null) return;
+    final fullSpan = widget.fullEndMs - widget.fullStartMs;
+    if (fullSpan <= 0) return;
+
+    final oldSpan = _g0End! - _g0Start!;
+    final newSpanRaw = (oldSpan / d.scale).round();
+    final newSpan = newSpanRaw.clamp(widget.minSpanMs, fullSpan);
+
+    final g = _geometry(size, _g0Start!, _g0End!);
+    final plotLeft = g.plotLeft;
+    final plotWidth = g.plotWidth;
+    if (plotWidth <= 0) return;
+
+    // Keep the time that was under the gesture's focal point pinned to the
+    // current focal screen position. Works for pinch, pan, and a mix of both.
+    final focalT = _g0FocalT!;
+    final focalX = d.localFocalPoint.dx;
+    final desiredStart =
+        focalT - (focalX - plotLeft) * newSpan / plotWidth;
+
+    final maxStart = widget.fullEndMs - newSpan;
+    final clampedStart =
+        desiredStart.round().clamp(widget.fullStartMs, maxStart);
+
+    setState(() {
+      _start = clampedStart;
+      _end = clampedStart + newSpan;
+    });
+  }
+
+  void _onScaleEnd(ScaleEndDetails _) {
+    _g0Start = null;
+    _g0End = null;
+    _g0FocalT = null;
+  }
+
+  void _resetZoom() {
+    setState(() {
+      _start = widget.fullStartMs;
+      _end = widget.fullEndMs;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final zoomed = _start != widget.fullStartMs || _end != widget.fullEndMs;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        return Stack(
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onScaleStart: (d) => _onScaleStart(d, size),
+              onScaleUpdate: (d) => _onScaleUpdate(d, size),
+              onScaleEnd: _onScaleEnd,
+              onDoubleTap: zoomed ? _resetZoom : null,
+              child: HrChart(
+                points: widget.points,
+                axis: widget.axis,
+                windowStartMs: _start,
+                windowEndMs: _end,
+                lineColor: widget.lineColor,
+                workoutStartMs: widget.workoutStartMs,
+                workoutEndMs: widget.workoutEndMs,
+              ),
+            ),
+            if (zoomed)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: IconButton(
+                  iconSize: 18,
+                  tooltip: 'Reset zoom',
+                  icon: const Icon(Icons.zoom_out_map),
+                  onPressed: _resetZoom,
+                  style: IconButton.styleFrom(
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .surface
+                        .withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// Wraps [HrChart] with draggable `workout` span handles. Dragging updates the
 /// window locally for responsiveness and reports the final bounds through
 /// [onChanged] when the drag ends.

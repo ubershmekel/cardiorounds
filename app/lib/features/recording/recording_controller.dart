@@ -118,7 +118,16 @@ final recordingControllerProvider = StateNotifierProvider.autoDispose
   // Picker writes here before navigating to the recording screen. Fall back to
   // a synthetic source if someone deep-links into /recording/:id directly.
   final source = ref.read(pendingHrSourceProvider) ?? FakeHeartRateSource();
-  ref.read(pendingHrSourceProvider.notifier).state = null;
+  // Clear the slot AFTER this provider finishes initializing. Mutating another
+  // provider inline would trip Riverpod's "providers can't modify each other
+  // during build" guard.
+  Future.microtask(() {
+    try {
+      ref.read(pendingHrSourceProvider.notifier).state = null;
+    } catch (_) {
+      // Container may be disposed by then; safe to swallow.
+    }
+  });
   return RecordingController(
     db: db,
     source: source,
