@@ -7,27 +7,15 @@ Implementation tasks in priority order. Check off when merged to main.
 ## Milestone 1 — Recording + Chart (MVP)
 
 - Android: foreground service with a persistent notification to keep recording
-  running while the phone is locked; iOS: background modes as required
-- Bluetooth: device picker (scan + list nearby HR devices, save chosen device)
+  running while the phone is locked
 - Bluetooth: auto-connect to last known device on subsequent sessions (5-second
   countdown + spinner before falling back to picker)
 - Bluetooth: handle disconnect during recording (NULL samples, reconnecting
   banner, auto-reconnect)
-- Live HR reading from BT device, persisted as samples in real time
 - Interrupted recording recovery: detect incomplete activity on launch, prompt
   user to continue or discard
-- Recording screen: display current BPM (`--` on signal loss), elapsed time,
-  min/avg/max
-- Recording screen: sport-type field (free text, pre-filled from last session)
-- Stop recording flow with confirmation modal; one-minute recovery capture
-  before navigating to review
-- Recording screen: live HR chart (time on X, BPM on Y) with neutral color
-  (zones unlocked only after max HR is set in Settings)
-- Workout review screen: full HR chart; `workout` span marker draggable on
-  chart
-- Home screen: list of past activities with basic summary row; first-run empty
-  state with hero "Start recording" and "Set up profile" options
-- Settings screen: athlete name, max HR, resting HR, app version
+- Recording screen: sport-type field pre-filled from last session
+- One-minute recovery capture after Stop, before navigating to review
 
 ---
 
@@ -50,8 +38,8 @@ Implementation tasks in priority order. Check off when merged to main.
 - Recovery event detection (Z5 → Z3 drop timing); stored as `recovery` span
   markers
 - Historical activity list with sparkline, load, duration
-- Round detection (automatic effort period segmentation); stored as `round`
-  span markers
+- Round detection (automatic effort period segmentation); stored as `round` span
+  markers
 - Round editing on review screen: drag, resize, add, delete
 
 ---

@@ -145,6 +145,40 @@ class AppDatabase extends _$AppDatabase {
       );
     });
   }
+
+  Future<Device> upsertDevice({
+    required String platformId,
+    required String name,
+  }) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final existing = await (select(devices)
+          ..where((d) => d.platformId.equals(platformId)))
+        .getSingleOrNull();
+    if (existing != null) {
+      await (update(devices)..where((d) => d.id.equals(existing.id))).write(
+        DevicesCompanion(
+          name: Value(name),
+          lastConnectedAtMs: Value(nowMs),
+        ),
+      );
+      return existing.copyWith(name: name, lastConnectedAtMs: nowMs);
+    }
+    final id = await into(devices).insert(
+      DevicesCompanion.insert(
+        platformId: platformId,
+        name: name,
+        lastConnectedAtMs: nowMs,
+      ),
+    );
+    return (select(devices)..where((d) => d.id.equals(id))).getSingle();
+  }
+
+  Future<Device?> lastConnectedDevice() {
+    return (select(devices)
+          ..orderBy([(d) => OrderingTerm.desc(d.lastConnectedAtMs)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
 }
 
 QueryExecutor _openConnection() {

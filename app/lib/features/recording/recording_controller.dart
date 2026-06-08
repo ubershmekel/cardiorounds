@@ -115,9 +115,13 @@ class RecordingController extends StateNotifier<RecordingState> {
 final recordingControllerProvider = StateNotifierProvider.autoDispose
     .family<RecordingController, RecordingState, int>((ref, activityId) {
   final db = ref.watch(databaseProvider);
+  // Picker writes here before navigating to the recording screen. Fall back to
+  // a synthetic source if someone deep-links into /recording/:id directly.
+  final source = ref.read(pendingHrSourceProvider) ?? FakeHeartRateSource();
+  ref.read(pendingHrSourceProvider.notifier).state = null;
   return RecordingController(
     db: db,
-    source: FakeHeartRateSource(),
+    source: source,
     activityId: activityId,
   );
 });

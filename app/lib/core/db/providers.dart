@@ -1,6 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../hr/hr_source.dart';
 import 'database.dart';
+
+/// Source chosen by the user on the Confirm Record screen, consumed by the
+/// RecordingController on the next route. Reset to null when recording stops.
+final pendingHrSourceProvider = StateProvider<HeartRateSource?>((_) => null);
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
