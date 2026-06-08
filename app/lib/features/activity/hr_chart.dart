@@ -103,24 +103,249 @@ class HrChart extends StatelessWidget {
     final start = windowStartMs ?? points.first.tMs;
     final end = windowEndMs ?? points.last.tMs;
 
-    return CustomPaint(
-      size: Size.infinite,
-      painter: HrChartPainter(
-        points: points,
-        axis: axis,
-        startMs: start,
-        endMs: end == start ? start + 1 : end,
-        lineColor: lineColor ?? scheme.primary,
-        gridColor: scheme.outlineVariant,
-        scrimColor: scheme.surface.withValues(alpha: 0.66),
-        handleColor: scheme.primary,
-        labelStyle: theme.textTheme.labelSmall!.copyWith(
-          color: scheme.onSurfaceVariant,
+    return _SelectableHrChart(
+      points: points,
+      axis: axis,
+      startMs: start,
+      endMs: end == start ? start + 1 : end,
+      lineColor: lineColor ?? scheme.primary,
+      gridColor: scheme.outlineVariant,
+      scrimColor: scheme.surface.withValues(alpha: 0.66),
+      handleColor: scheme.primary,
+      labelBackgroundColor: scheme.surfaceContainerHighest.withValues(
+        alpha: 0.92,
+      ),
+      labelStyle: theme.textTheme.labelSmall!.copyWith(
+        color: scheme.onSurfaceVariant,
+      ),
+      workoutStartMs: workoutStartMs,
+      workoutEndMs: workoutEndMs,
+      showHandles: showHandles,
+      zoneSetup: zoneSetup,
+    );
+  }
+}
+
+class HrChartSelection {
+  const HrChartSelection({required this.tMs, required this.hr});
+
+  final int tMs;
+  final int hr;
+}
+
+class _SelectableHrChart extends StatefulWidget {
+  const _SelectableHrChart({
+    required this.points,
+    required this.axis,
+    required this.startMs,
+    required this.endMs,
+    required this.lineColor,
+    required this.gridColor,
+    required this.scrimColor,
+    required this.handleColor,
+    required this.labelBackgroundColor,
+    required this.labelStyle,
+    this.workoutStartMs,
+    this.workoutEndMs,
+    this.showHandles = false,
+    this.zoneSetup,
+  });
+
+  final List<HrChartPoint> points;
+  final HrAxisRange axis;
+  final int startMs;
+  final int endMs;
+  final Color lineColor;
+  final Color gridColor;
+  final Color scrimColor;
+  final Color handleColor;
+  final Color labelBackgroundColor;
+  final TextStyle labelStyle;
+  final int? workoutStartMs;
+  final int? workoutEndMs;
+  final bool showHandles;
+  final ZoneSetup? zoneSetup;
+
+  @override
+  State<_SelectableHrChart> createState() => _SelectableHrChartState();
+}
+
+class _SelectableHrChartState extends State<_SelectableHrChart> {
+  static const double _selectionLabelWidth = 74;
+  static const double _selectionLabelHeight = 28;
+
+  HrChartSelection? _selection;
+
+  @override
+  void didUpdateWidget(_SelectableHrChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final selection = _selection;
+    if (selection == null) return;
+    final hr = _hrAtT(selection.tMs);
+    _selection = hr == null
+        ? null
+        : HrChartSelection(tMs: selection.tMs, hr: hr);
+  }
+
+  void _selectAt(Offset position, Size size) {
+    final g = HrChartGeometry(
+      size: size,
+      startMs: widget.startMs,
+      endMs: widget.endMs,
+      axis: widget.axis,
+    );
+    if (g.plotWidth <= 0 || g.plotHeight <= 0) return;
+    final plotRect = Rect.fromLTRB(
+      g.plotLeft,
+      g.plotTop,
+      g.plotRight,
+      g.plotBottom,
+    );
+    if (!plotRect.contains(position)) return;
+
+    final tMs = g.tForX(position.dx);
+    final hr = _hrAtT(tMs);
+    if (hr == null) return;
+    setState(() => _selection = HrChartSelection(tMs: tMs, hr: hr));
+  }
+
+  int? _hrAtT(int tMs) {
+    if (tMs < widget.startMs || tMs > widget.endMs) return null;
+
+    HrChartPoint? previous;
+    for (final point in widget.points) {
+      if (point.tMs < widget.startMs || point.tMs > widget.endMs) {
+        previous = null;
+        continue;
+      }
+
+      final hr = point.hr;
+      if (hr == null) {
+        previous = null;
+        continue;
+      }
+
+      if (point.tMs == tMs) return hr;
+
+      final prev = previous;
+      if (prev != null && prev.tMs <= tMs && tMs <= point.tMs) {
+        if (prev.tMs == point.tMs) return hr;
+        final ratio = (tMs - prev.tMs) / (point.tMs - prev.tMs);
+        return (prev.hr! + (hr - prev.hr!) * ratio).round();
+      }
+
+      previous = point;
+    }
+
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        final g = HrChartGeometry(
+          size: size,
+          startMs: widget.startMs,
+          endMs: widget.endMs,
+          axis: widget.axis,
+        );
+        final selection = _selection;
+
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (details) => _selectAt(details.localPosition, size),
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: HrChartPainter(
+                    points: widget.points,
+                    axis: widget.axis,
+                    startMs: widget.startMs,
+                    endMs: widget.endMs,
+                    lineColor: widget.lineColor,
+                    gridColor: widget.gridColor,
+                    scrimColor: widget.scrimColor,
+                    handleColor: widget.handleColor,
+                    labelStyle: widget.labelStyle,
+                    workoutStartMs: widget.workoutStartMs,
+                    workoutEndMs: widget.workoutEndMs,
+                    showHandles: widget.showHandles,
+                    zoneSetup: widget.zoneSetup,
+                    selection: selection,
+                  ),
+                ),
+              ),
+            ),
+            if (selection != null && g.plotWidth > 0)
+              _SelectionLabel(
+                selection: selection,
+                geometry: g,
+                backgroundColor: widget.labelBackgroundColor,
+                borderColor: widget.gridColor,
+                textStyle: widget.labelStyle,
+                onDismissed: () => setState(() => _selection = null),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SelectionLabel extends StatelessWidget {
+  const _SelectionLabel({
+    required this.selection,
+    required this.geometry,
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.textStyle,
+    required this.onDismissed,
+  });
+
+  final HrChartSelection selection;
+  final HrChartGeometry geometry;
+  final Color backgroundColor;
+  final Color borderColor;
+  final TextStyle textStyle;
+  final VoidCallback onDismissed;
+
+  @override
+  Widget build(BuildContext context) {
+    final availableWidth = geometry.plotWidth;
+    final width = availableWidth < _SelectableHrChartState._selectionLabelWidth
+        ? availableWidth
+        : _SelectableHrChartState._selectionLabelWidth;
+    final left = (geometry.xForT(selection.tMs) - width / 2)
+        .clamp(geometry.plotLeft, geometry.plotRight - width)
+        .toDouble();
+
+    return Positioned(
+      left: left,
+      top: 0,
+      width: width,
+      height: _SelectableHrChartState._selectionLabelHeight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onDismissed,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            border: Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Center(
+            child: Text(
+              '${selection.hr} bpm',
+              maxLines: 1,
+              overflow: TextOverflow.clip,
+              style: textStyle,
+            ),
+          ),
         ),
-        workoutStartMs: workoutStartMs,
-        workoutEndMs: workoutEndMs,
-        showHandles: showHandles,
-        zoneSetup: zoneSetup,
       ),
     );
   }
@@ -141,6 +366,7 @@ class HrChartPainter extends CustomPainter {
     this.workoutEndMs,
     this.showHandles = false,
     this.zoneSetup,
+    this.selection,
   });
 
   final List<HrChartPoint> points;
@@ -156,6 +382,7 @@ class HrChartPainter extends CustomPainter {
   final int? workoutEndMs;
   final bool showHandles;
   final ZoneSetup? zoneSetup;
+  final HrChartSelection? selection;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -204,6 +431,21 @@ class HrChartPainter extends CustomPainter {
 
     _paintLine(canvas, g);
     _paintWorkoutWindow(canvas, g);
+    _paintSelection(canvas, g);
+  }
+
+  void _paintSelection(Canvas canvas, HrChartGeometry g) {
+    final s = selection;
+    if (s == null || s.tMs < startMs || s.tMs > endMs) return;
+
+    final x = g.xForT(s.tMs);
+    final linePaint = Paint()
+      ..color = gridColor.withValues(alpha: 0.9)
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(x, g.plotTop), Offset(x, g.plotBottom), linePaint);
+
+    final pointPaint = Paint()..color = lineColor;
+    canvas.drawCircle(Offset(x, g.yForHr(s.hr)), 3, pointPaint);
   }
 
   void _paintLine(Canvas canvas, HrChartGeometry g) {
@@ -332,7 +574,9 @@ class HrChartPainter extends CustomPainter {
         old.workoutStartMs != workoutStartMs ||
         old.workoutEndMs != workoutEndMs ||
         old.showHandles != showHandles ||
-        old.zoneSetup != zoneSetup;
+        old.zoneSetup != zoneSetup ||
+        old.selection?.tMs != selection?.tMs ||
+        old.selection?.hr != selection?.hr;
   }
 }
 

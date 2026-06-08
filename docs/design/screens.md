@@ -151,7 +151,12 @@ converts it to a human marker.
 - **X axis**: elapsed time from recording start
 - **Y axis**: BPM, auto-scaled with a small margin above the session max; the
   minimum value is a ten-rounded number under the minimum HR (like 40)
+- **Grid**: subtle horizontal guide lines every 10 bpm, with sparse Y-axis
+  labels so the line remains visually dominant
 - **Line**: continuous, colored by zone (see zones.md); breaks at NULL HR gaps
+- **Tap inspection**: tapping the plot shows a vertical line at that timestamp
+  and a top label with the interpolated BPM value at that x position; tapping
+  the label dismisses the line and label
 - **Markers**: vertical tick lines at each marker's timestamp; `round` ticks
   span their full duration; `workout` marker boundaries dim the chart outside
   the effort period
