@@ -22,8 +22,7 @@ at the top and a log of past recordings below. Each activity row shows:
 
 ▇▆▃ 2025-05-13 · 48 min · 142 avg · 181 max · 6.8k beats
 
-Tapping a past recording opens the activity screen for that recording in
-**review** state.
+Tapping a past recording opens the activity review screen for that recording.
 
 At the bottom there is a floating nav bar with:
 
@@ -37,7 +36,7 @@ This screen handles Bluetooth HR device connection before recording starts.
 
 A sport-type field is shown at the top (free text, pre-filled with the most
 recently used sport type). The user can change it here; it can also be changed
-on the activity screen.
+on the activity review screen after the workout.
 
 ### Auto-connect (returning user)
 
@@ -73,50 +72,38 @@ crash), it shows a prompt on launch:
 > "It looks like your last recording was interrupted. Continue where you left
 > off?"
 
-**Continue** — opens the activity screen in **recording** state for that
-activity, allowing the user to stop, review, and save or discard as usual.
+**Continue** — opens the recording screen for that activity, allowing the user
+to stop, review, and save or discard as usual.
 
 **Discard** — deletes the incomplete activity.
 
-## Activity screen
+## Recording screen
 
-This is a single screen used for all live and historical views of an activity.
-Its behavior and available actions change based on its **state**.
+Shown while a workout is in progress. Lives at `/recording/:activityId`.
 
 ### States
 
-| State                  | Description                                                                                                                                                                                                     |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Recording**          | Live data is being captured from the BT device.                                                                                                                                                                 |
-| **Recording recovery** | The user tapped stop; the app captures one more minute of recovery data before transitioning to **Review**. A "Recording recovery…" label replaces the stop button. The chart and stats continue updating live. |
-| **Review**             | Recording is complete. The full activity is shown. Stats and chart are read-only unless the user enters edit mode.                                                                                              |
+TBD we might have a "recording paused" state, or a state where a label is
+started and not yet ended (for exmample, if the user marks a recovery started or
+a round started and has not yet ended that label).
 
-The screen never navigates away when transitioning between states — it updates
-in place.
+### Display
 
-### Display (all states)
-
-- The current heart rate (large, prominent); `--` when signal is lost or in
-  Review state
-- Elapsed time
+- Live current heart rate (large, prominent); `--` on signal loss
+- Elapsed time (ticking)
 - A live HR chart (see Chart spec below)
-- Max heart rate
-- Min heart rate
-- Average heart rate
-- Sport type (tappable to edit inline)
-
-In **Recording** state additionally show:
-
-- A stop button (requires confirmation modal)
+- Min / avg / max heart rate
+- Time-in-zone breakdown (when both max and resting HR are set in Settings)
+- A stop button (requires confirmation modal); replaced by a "Recording
+  recovery…" label during the recovery period
 - A reconnecting banner when BT connection is lost
+- Sport type — pre-filled from the picker, editable inline on review
 
-In **Review** state additionally show:
+Future live-action buttons (tap-to-mark a moment, label a round, label a
+recovery period) will live here too. See Milestone 3 in `todo.md`.
 
-- Activity name (editable inline)
-- In-depth analysis and advice (Milestone 3+)
-
-Zone colors on the chart are active only when max HR is set. Otherwise the chart
-uses a neutral single-color line and shows a small prompt linking to Settings.
+Zone colors on the chart are active only when both max and resting HR are set.
+Otherwise the chart uses a neutral single-color line.
 
 ### Bluetooth disconnect during recording
 
@@ -131,14 +118,27 @@ If the BT device disconnects mid-recording:
 
 The gap in HR data is visible in the chart as a break in the line.
 
-### Marker editing (Review state)
+## Activity review screen
 
-To edit markers, tap the "edit" button on the chart first, which makes the
-marker UI interactive.
+Shown for any completed (or interrupted) activity. Read-only by default. Lives
+at `/activity/:activityId`.
 
-The user can adjust the workout boundaries after the fact by dragging the
-`workout` span marker's start and end handles on the chart. This is useful when
-recording started early (e.g. while still walking to the mat) or ended late.
+### Display
+
+- Date, total duration, and sport type in a metadata row
+- A pan + pinch-to-zoom HR chart (see Chart spec below)
+- Min / avg / max heart rate
+- Time-in-zone breakdown — computed over the `workout` span marker window when
+  one is set; otherwise over the full duration
+- Activity name (editable inline)
+- In-depth analysis and advice (Milestone 3+)
+
+### Marker editing
+
+Tap the "edit" icon in the app bar to enter edit mode. While editing, the chart
+shows draggable handles on the `workout` span marker so the user can adjust the
+workout boundaries — useful when recording started early (e.g. walking to the
+mat) or ended late.
 
 Human `round` markers appear as spans on the chart. The user can drag, resize,
 add, or delete them here.
