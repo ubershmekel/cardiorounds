@@ -4,9 +4,10 @@ import '../../core/zones/zone_times.dart';
 import '../../core/zones/zones.dart';
 
 class ZoneBreakdown extends StatelessWidget {
-  const ZoneBreakdown({super.key, required this.times});
+  const ZoneBreakdown({super.key, required this.times, required this.setup});
 
   final ZoneTimes times;
+  final ZoneSetup setup;
 
   String _fmt(int ms) {
     final totalSec = ms ~/ 1000;
@@ -52,6 +53,7 @@ class ZoneBreakdown extends StatelessWidget {
             zone: z,
             ms: times.perZone[z] ?? 0,
             totalMs: total,
+            lowerBpm: setup.lowerBpmFor(z),
             fmt: _fmt,
           ),
       ],
@@ -64,12 +66,14 @@ class _ZoneRow extends StatelessWidget {
     required this.zone,
     required this.ms,
     required this.totalMs,
+    required this.lowerBpm,
     required this.fmt,
   });
 
   final Zone zone;
   final int ms;
   final int totalMs;
+  final int lowerBpm;
   final String Function(int) fmt;
 
   @override
@@ -78,6 +82,10 @@ class _ZoneRow extends StatelessWidget {
     final percent = totalMs == 0 ? 0 : (ms * 100 / totalMs).round();
     final muted = ms == 0;
     final color = muted ? theme.colorScheme.onSurfaceVariant : null;
+    final subtle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -93,19 +101,33 @@ class _ZoneRow extends StatelessWidget {
           const SizedBox(width: 10),
           SizedBox(
             width: 28,
-            child: Text(zone.shortLabel,
-                style: theme.textTheme.bodyMedium?.copyWith(color: color)),
+            child: Text(
+              zone.shortLabel,
+              style: theme.textTheme.bodyMedium?.copyWith(color: color),
+            ),
           ),
           const SizedBox(width: 4),
           Expanded(
-            child: Text(zone.name,
-                style: theme.textTheme.bodyMedium?.copyWith(color: color)),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  zone.name,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: color),
+                ),
+                const SizedBox(width: 6),
+                Text('($lowerBpm+ bpm)', style: subtle),
+              ],
+            ),
           ),
-          Text(fmt(ms),
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: color, fontFeatures: const [
-                FontFeature.tabularFigures(),
-              ])),
+          Text(
+            fmt(ms),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
           const SizedBox(width: 12),
           SizedBox(
             width: 40,

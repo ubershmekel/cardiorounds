@@ -161,6 +161,7 @@ class _ActivityBody extends StatelessWidget {
                         fullEndMs: activity.durationMs,
                         workoutStartMs: workoutStart,
                         workoutEndMs: workoutEnd,
+                        zoneSetup: zoneSetup,
                       ),
               ),
               if (editing)
@@ -180,6 +181,7 @@ class _ActivityBody extends StatelessWidget {
                 ZoneLockedPrompt(onTap: onOpenSettings)
               else
                 ZoneBreakdown(
+                  setup: zoneSetup!,
                   times: computeZoneTimes(
                     rows,
                     zoneSetup!,

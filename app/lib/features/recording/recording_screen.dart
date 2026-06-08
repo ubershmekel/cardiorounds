@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/db/providers.dart';
+import '../../core/zones/zone_times.dart';
+import '../../core/zones/zones.dart';
 import '../activity/hr_chart.dart';
 import '../activity/hr_stats.dart';
 import '../activity/hr_stats_row.dart';
+import '../activity/zone_breakdown.dart';
 import 'recording_controller.dart';
 
 const int _liveWindowMs = 5 * 60 * 1000;
@@ -52,6 +55,11 @@ class RecordingScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(recordingControllerProvider(activityId));
     final samples = ref.watch(samplesProvider(activityId)).valueOrNull ?? [];
+    final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
+    final zoneSetup = zoneSetupFor(
+      maxHr: athlete?.maxHeartrate,
+      restingHr: athlete?.restingHeartrate,
+    );
     final scheme = Theme.of(context).colorScheme;
     final bpmText = state.currentBpm?.toString() ?? '--';
 
@@ -110,11 +118,19 @@ class RecordingScreen extends ConsumerWidget {
                       windowStartMs: windowStart,
                       windowEndMs: latestMs,
                       lineColor: scheme.error,
+                      zoneSetup: zoneSetup,
                     ),
                   ),
                   const SizedBox(height: 16),
                   HrStatsRow(stats: stats),
                   const SizedBox(height: 16),
+                  if (zoneSetup != null) ...[
+                    ZoneBreakdown(
+                      setup: zoneSetup,
+                      times: computeZoneTimes(samples, zoneSetup),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   FilledButton.tonalIcon(
                     onPressed:
                         state.stopped ? null : () => _onStop(context, ref),

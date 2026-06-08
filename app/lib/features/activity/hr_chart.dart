@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/zones/zones.dart';
 import 'hr_stats.dart';
 
 class HrChartPoint {
@@ -67,6 +68,7 @@ class HrChart extends StatelessWidget {
     this.workoutStartMs,
     this.workoutEndMs,
     this.showHandles = false,
+    this.zoneSetup,
   });
 
   final List<HrChartPoint> points;
@@ -77,6 +79,10 @@ class HrChart extends StatelessWidget {
   final int? workoutStartMs;
   final int? workoutEndMs;
   final bool showHandles;
+
+  /// When provided, each line segment is colored by the zone of its starting
+  /// sample. When null, the whole line uses [lineColor] (or the theme primary).
+  final ZoneSetup? zoneSetup;
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +118,7 @@ class HrChart extends StatelessWidget {
         workoutStartMs: workoutStartMs,
         workoutEndMs: workoutEndMs,
         showHandles: showHandles,
+        zoneSetup: zoneSetup,
       ),
     );
   }
@@ -131,6 +138,7 @@ class HrChartPainter extends CustomPainter {
     this.workoutStartMs,
     this.workoutEndMs,
     this.showHandles = false,
+    this.zoneSetup,
   });
 
   final List<HrChartPoint> points;
@@ -145,6 +153,7 @@ class HrChartPainter extends CustomPainter {
   final int? workoutStartMs;
   final int? workoutEndMs;
   final bool showHandles;
+  final ZoneSetup? zoneSetup;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -174,37 +183,64 @@ class HrChartPainter extends CustomPainter {
     _paintLabel(canvas, _elapsed(endMs), Offset(g.plotRight, g.plotBottom + 2),
         alignRight: true);
 
-    // The HR line, broken at NULL samples.
-    final linePaint = Paint()
-      ..color = lineColor
+    _paintLine(canvas, g);
+    _paintWorkoutWindow(canvas, g);
+  }
+
+  void _paintLine(Canvas canvas, HrChartGeometry g) {
+    final basePaint = Paint()
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.round;
 
-    final path = Path();
-    var penDown = false;
-    for (final p in points) {
-      if (p.tMs < startMs || p.tMs > endMs) {
-        penDown = false;
-        continue;
+    final setup = zoneSetup;
+    if (setup == null) {
+      // Single-color line: one path, faster to draw.
+      basePaint.color = lineColor;
+      final path = Path();
+      var penDown = false;
+      for (final p in points) {
+        if (p.tMs < startMs || p.tMs > endMs) {
+          penDown = false;
+          continue;
+        }
+        final hr = p.hr;
+        if (hr == null) {
+          penDown = false;
+          continue;
+        }
+        final offset = Offset(g.xForT(p.tMs), g.yForHr(hr));
+        if (penDown) {
+          path.lineTo(offset.dx, offset.dy);
+        } else {
+          path.moveTo(offset.dx, offset.dy);
+          penDown = true;
+        }
       }
-      final hr = p.hr;
-      if (hr == null) {
-        penDown = false;
-        continue;
-      }
-      final offset = Offset(g.xForT(p.tMs), g.yForHr(hr));
-      if (penDown) {
-        path.lineTo(offset.dx, offset.dy);
-      } else {
-        path.moveTo(offset.dx, offset.dy);
-        penDown = true;
-      }
+      canvas.drawPath(path, basePaint);
+      return;
     }
-    canvas.drawPath(path, linePaint);
 
-    _paintWorkoutWindow(canvas, g);
+    // Zone-colored: draw each segment between consecutive non-null samples
+    // with the color of its starting sample's zone.
+    HrChartPoint? prev;
+    for (final p in points) {
+      if (p.tMs < startMs || p.tMs > endMs || p.hr == null) {
+        prev = null;
+        continue;
+      }
+      if (prev != null && prev.hr != null) {
+        final zone = setup.zoneFor(prev.hr);
+        basePaint.color = zone?.color ?? lineColor;
+        canvas.drawLine(
+          Offset(g.xForT(prev.tMs), g.yForHr(prev.hr!)),
+          Offset(g.xForT(p.tMs), g.yForHr(p.hr!)),
+          basePaint,
+        );
+      }
+      prev = p;
+    }
   }
 
   void _paintWorkoutWindow(Canvas canvas, HrChartGeometry g) {
@@ -269,7 +305,8 @@ class HrChartPainter extends CustomPainter {
         old.lineColor != lineColor ||
         old.workoutStartMs != workoutStartMs ||
         old.workoutEndMs != workoutEndMs ||
-        old.showHandles != showHandles;
+        old.showHandles != showHandles ||
+        old.zoneSetup != zoneSetup;
   }
 }
 
@@ -288,6 +325,7 @@ class ZoomableHrChart extends StatefulWidget {
     this.workoutStartMs,
     this.workoutEndMs,
     this.minSpanMs = 5000,
+    this.zoneSetup,
   });
 
   final List<HrChartPoint> points;
@@ -298,6 +336,7 @@ class ZoomableHrChart extends StatefulWidget {
   final int? workoutStartMs;
   final int? workoutEndMs;
   final int minSpanMs;
+  final ZoneSetup? zoneSetup;
 
   @override
   State<ZoomableHrChart> createState() => _ZoomableHrChartState();
@@ -404,6 +443,7 @@ class _ZoomableHrChartState extends State<ZoomableHrChart> {
                 lineColor: widget.lineColor,
                 workoutStartMs: widget.workoutStartMs,
                 workoutEndMs: widget.workoutEndMs,
+                zoneSetup: widget.zoneSetup,
               ),
             ),
             if (zoomed)
