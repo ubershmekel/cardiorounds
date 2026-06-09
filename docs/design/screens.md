@@ -164,8 +164,10 @@ converts it to a human marker.
   reading is always visible on the right; shows the last ~5 minutes by default
   with pinch-to-zoom to choose how much time back is visible. The recording
   chart keeps the newest reading pinned to the right and does not pan.
-- **Review behavior**: the full session is shown at once, fitting the width;
-  pinch-to-zoom to inspect detail
+- **Review behavior**: an untrimmed activity shows the full session at once.
+  When a `workout` trim exists, the chart defaults to the trimmed span as its
+  visible bounds; pinch-to-zoom and pan can reveal inactive sections, which are
+  greyed out outside the `workout` marker boundaries.
 
 ## Settings screen
 

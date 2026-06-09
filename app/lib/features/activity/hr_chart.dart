@@ -591,6 +591,8 @@ class ZoomableHrChart extends StatefulWidget {
     required this.axis,
     required this.fullStartMs,
     required this.fullEndMs,
+    this.initialStartMs,
+    this.initialEndMs,
     this.lineColor,
     this.workoutStartMs,
     this.workoutEndMs,
@@ -602,6 +604,8 @@ class ZoomableHrChart extends StatefulWidget {
   final HrAxisRange axis;
   final int fullStartMs;
   final int fullEndMs;
+  final int? initialStartMs;
+  final int? initialEndMs;
   final Color? lineColor;
   final int? workoutStartMs;
   final int? workoutEndMs;
@@ -613,22 +617,46 @@ class ZoomableHrChart extends StatefulWidget {
 }
 
 class _ZoomableHrChartState extends State<ZoomableHrChart> {
-  late int _start = widget.fullStartMs;
-  late int _end = widget.fullEndMs;
+  late int _start = _initialWindow.start;
+  late int _end = _initialWindow.end;
 
   // Snapshot at the start of a scale gesture so cumulative `scale` is honored.
   int? _g0Start;
   int? _g0End;
   double? _g0FocalT;
 
+  int get _minVisibleSpanMs {
+    final fullSpan = widget.fullEndMs - widget.fullStartMs;
+    if (fullSpan <= 0) return 1;
+    return widget.minSpanMs < fullSpan ? widget.minSpanMs : fullSpan;
+  }
+
+  ({int start, int end}) get _initialWindow {
+    final fullEnd = widget.fullEndMs <= widget.fullStartMs
+        ? widget.fullStartMs + 1
+        : widget.fullEndMs;
+    final minSpan = _minVisibleSpanMs;
+    final end = (widget.initialEndMs ?? fullEnd)
+        .clamp(widget.fullStartMs + minSpan, fullEnd)
+        .toInt();
+    final start = (widget.initialStartMs ?? widget.fullStartMs)
+        .clamp(widget.fullStartMs, end - minSpan)
+        .toInt();
+    return (start: start, end: end);
+  }
+
   @override
   void didUpdateWidget(ZoomableHrChart old) {
     super.didUpdateWidget(old);
-    // If the underlying activity changes length, reset the visible window.
+    // If the underlying activity or preferred review window changes, reset the
+    // visible window.
     if (old.fullStartMs != widget.fullStartMs ||
-        old.fullEndMs != widget.fullEndMs) {
-      _start = widget.fullStartMs;
-      _end = widget.fullEndMs;
+        old.fullEndMs != widget.fullEndMs ||
+        old.initialStartMs != widget.initialStartMs ||
+        old.initialEndMs != widget.initialEndMs) {
+      final initialWindow = _initialWindow;
+      _start = initialWindow.start;
+      _end = initialWindow.end;
     }
   }
 
@@ -654,7 +682,7 @@ class _ZoomableHrChartState extends State<ZoomableHrChart> {
 
     final oldSpan = _g0End! - _g0Start!;
     final newSpanRaw = (oldSpan / d.scale).round();
-    final newSpan = newSpanRaw.clamp(widget.minSpanMs, fullSpan);
+    final newSpan = newSpanRaw.clamp(_minVisibleSpanMs, fullSpan).toInt();
 
     final g = _geometry(size, _g0Start!, _g0End!);
     final plotLeft = g.plotLeft;
@@ -686,15 +714,17 @@ class _ZoomableHrChartState extends State<ZoomableHrChart> {
   }
 
   void _resetZoom() {
+    final initialWindow = _initialWindow;
     setState(() {
-      _start = widget.fullStartMs;
-      _end = widget.fullEndMs;
+      _start = initialWindow.start;
+      _end = initialWindow.end;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final zoomed = _start != widget.fullStartMs || _end != widget.fullEndMs;
+    final initialWindow = _initialWindow;
+    final zoomed = _start != initialWindow.start || _end != initialWindow.end;
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);

@@ -185,6 +185,8 @@ class _ActivityBody extends StatelessWidget {
                         axis: axis,
                         fullStartMs: 0,
                         fullEndMs: activity.durationMs,
+                        initialStartMs: workoutStart,
+                        initialEndMs: workoutEnd,
                         workoutStartMs: workoutStart,
                         workoutEndMs: workoutEnd,
                         zoneSetup: zoneSetup,
