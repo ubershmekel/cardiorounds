@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../app/colors.dart';
+
 /// Heart-rate zones, ordered low to high. Thresholds are fractions of the
 /// athlete's heart-rate reserve (HRR = max HR - resting HR), per Karvonen.
 /// See docs/design/zones.md for the user-facing definitions.
 enum Zone {
-  z1('Z1', 'Rest', 0.0, 0.60, Color(0xFF9E9E9E)),
-  z2('Z2', 'Light', 0.60, 0.70, Color(0xFF2196F3)),
-  z3('Z3', 'Moderate', 0.70, 0.80, Color(0xFF4CAF50)),
-  z4('Z4', 'Hard', 0.80, 0.90, Color(0xFFFF9800)),
-  z5('Z5', 'Max', 0.90, double.infinity, Color(0xFFE91E63));
+  z1('Z1', 'Rest', 0.0, 0.60, AppColors.zoneRest),
+  z2('Z2', 'Light', 0.60, 0.70, AppColors.zoneLight),
+  z3('Z3', 'Moderate', 0.70, 0.80, AppColors.zoneModerate),
+  z4('Z4', 'Hard', 0.80, 0.90, AppColors.zoneHard),
+  z5('Z5', 'Max', 0.90, double.infinity, AppColors.zoneMax);
 
   const Zone(
     this.shortLabel,

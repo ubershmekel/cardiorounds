@@ -62,6 +62,8 @@ class RecordingScreen extends ConsumerWidget {
     );
     final scheme = Theme.of(context).colorScheme;
     final bpmText = state.currentBpm?.toString() ?? '--';
+    final currentZone = zoneSetup?.zoneFor(state.currentBpm);
+    final bpmColor = currentZone?.color ?? scheme.primary;
 
     final stats = HrStats.fromHeartRates(samples.map((r) => r.hr));
     final axis = HrAxisRange.forStats(minHr: stats.min, maxHr: stats.max);
@@ -99,7 +101,7 @@ class RecordingScreen extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 88,
                           fontWeight: FontWeight.w600,
-                          color: scheme.error,
+                          color: bpmColor,
                           height: 1.0,
                         ),
                       ),
@@ -123,7 +125,7 @@ class RecordingScreen extends ConsumerWidget {
                       axis: axis,
                       windowStartMs: windowStart,
                       windowEndMs: latestMs,
-                      lineColor: scheme.error,
+                      lineColor: scheme.primary,
                       zoneSetup: zoneSetup,
                     ),
                   ),
