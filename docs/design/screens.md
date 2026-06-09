@@ -162,7 +162,8 @@ converts it to a human marker.
   the effort period
 - **Recording / Recording recovery behavior**: the chart scrolls so the latest
   reading is always visible on the right; shows the last ~5 minutes by default
-  with pinch-to-zoom to see more history
+  with pinch-to-zoom to choose how much time back is visible. The recording
+  chart keeps the newest reading pinned to the right and does not pan.
 - **Review behavior**: the full session is shown at once, fitting the width;
   pinch-to-zoom to inspect detail
 

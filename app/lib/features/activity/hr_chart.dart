@@ -740,6 +740,96 @@ class _ZoomableHrChartState extends State<ZoomableHrChart> {
   }
 }
 
+/// Wraps [HrChart] with pinch-to-zoom for a live, trailing time window. Used
+/// while recording so the newest sample stays pinned to the right edge while
+/// the user chooses how much history to show.
+class TrailingZoomableHrChart extends StatefulWidget {
+  const TrailingZoomableHrChart({
+    super.key,
+    required this.points,
+    required this.axis,
+    required this.fullStartMs,
+    required this.fullEndMs,
+    required this.initialSpanMs,
+    this.lineColor,
+    this.minSpanMs = 5000,
+    this.zoneSetup,
+  });
+
+  final List<HrChartPoint> points;
+  final HrAxisRange axis;
+  final int fullStartMs;
+  final int fullEndMs;
+  final int initialSpanMs;
+  final Color? lineColor;
+  final int minSpanMs;
+  final ZoneSetup? zoneSetup;
+
+  @override
+  State<TrailingZoomableHrChart> createState() =>
+      _TrailingZoomableHrChartState();
+}
+
+class _TrailingZoomableHrChartState extends State<TrailingZoomableHrChart> {
+  late int _spanMs = widget.initialSpanMs;
+  int? _g0SpanMs;
+
+  int get _fullSpanMs => widget.fullEndMs - widget.fullStartMs;
+
+  int _clampSpan(int spanMs) {
+    final fullSpan = _fullSpanMs;
+    if (fullSpan <= 0) return 1;
+    final minSpan = widget.minSpanMs < fullSpan ? widget.minSpanMs : fullSpan;
+    if (spanMs < minSpan) return minSpan;
+    if (spanMs > fullSpan) return fullSpan;
+    return spanMs;
+  }
+
+  @override
+  void didUpdateWidget(TrailingZoomableHrChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _spanMs = _clampSpan(_spanMs);
+  }
+
+  void _onScaleStart(ScaleStartDetails _) {
+    _g0SpanMs = _clampSpan(_spanMs);
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails d) {
+    final startSpan = _g0SpanMs;
+    if (startSpan == null || d.scale <= 0) return;
+    setState(() => _spanMs = _clampSpan((startSpan / d.scale).round()));
+  }
+
+  void _onScaleEnd(ScaleEndDetails _) {
+    _g0SpanMs = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final span = _clampSpan(_spanMs);
+    final rawStart = widget.fullEndMs - span;
+    final windowStart = rawStart < widget.fullStartMs
+        ? widget.fullStartMs
+        : rawStart;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onScaleStart: _onScaleStart,
+      onScaleUpdate: _onScaleUpdate,
+      onScaleEnd: _onScaleEnd,
+      child: HrChart(
+        points: widget.points,
+        axis: widget.axis,
+        windowStartMs: windowStart,
+        windowEndMs: widget.fullEndMs,
+        lineColor: widget.lineColor,
+        zoneSetup: widget.zoneSetup,
+      ),
+    );
+  }
+}
+
 /// Wraps [HrChart] with draggable `workout` span handles. Dragging updates the
 /// window locally for responsiveness and reports the final bounds through
 /// [onChanged] when the drag ends.

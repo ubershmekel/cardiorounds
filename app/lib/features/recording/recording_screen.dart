@@ -74,7 +74,7 @@ class RecordingScreen extends ConsumerWidget {
         ? null
         : computeZoneTimes(samples, zoneSetup);
     final latestMs = points.isEmpty ? 0 : points.last.tMs;
-    final windowStart = latestMs > _liveWindowMs ? latestMs - _liveWindowMs : 0;
+    final firstMs = points.isEmpty ? 0 : points.first.tMs;
 
     return PopScope(
       canPop: false,
@@ -120,11 +120,12 @@ class RecordingScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   Expanded(
-                    child: HrChart(
+                    child: TrailingZoomableHrChart(
                       points: points,
                       axis: axis,
-                      windowStartMs: windowStart,
-                      windowEndMs: latestMs,
+                      fullStartMs: firstMs,
+                      fullEndMs: latestMs,
+                      initialSpanMs: _liveWindowMs,
                       lineColor: scheme.primary,
                       zoneSetup: zoneSetup,
                     ),
