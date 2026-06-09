@@ -79,6 +79,12 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
     ).showSnackBar(const SnackBar(content: Text('Saved')));
   }
 
+  bool get _isHRSwapped {
+    final max = int.tryParse(_maxHrController.text.trim());
+    final resting = int.tryParse(_restingHrController.text.trim());
+    return max != null && resting != null && max <= resting;
+  }
+
   @override
   Widget build(BuildContext context) {
     final maxHrUnset = widget.athlete.maxHeartrate == null;
@@ -109,8 +115,9 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           controller: _maxHrController,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onChanged: (_) => setState(() {}),
           decoration: const InputDecoration(
-            labelText: 'Max heart rate (bpm)',
+            labelText: 'MAX heart rate (bpm)',
             helperText: 'Leave empty if unknown',
             border: OutlineInputBorder(),
             suffixIcon: Tooltip(
@@ -125,6 +132,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           controller: _restingHrController,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onChanged: (_) => setState(() {}),
           decoration: const InputDecoration(
             labelText: 'Resting heart rate (bpm)',
             helperText: 'Leave empty if unknown',
@@ -136,9 +144,30 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
             ),
           ),
         ),
+        if (_isHRSwapped) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 18,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Max HR must be greater than resting HR - are they swapped?',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 24),
         FilledButton(
-          onPressed: _saving ? null : _save,
+          onPressed: _saving || _isHRSwapped ? null : _save,
           child: _saving
               ? const SizedBox(
                   height: 16,
