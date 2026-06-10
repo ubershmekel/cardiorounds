@@ -75,8 +75,9 @@ void main() {
         printer: (_) {},
       );
 
-      await logger.getLogFile();
+      final resolvedFile = await logger.resolveLogFile();
 
+      expect(resolvedFile?.path, file.path);
       final lines = await file.readAsLines();
       expect(lines, isNotEmpty);
       expect(lines.length, lessThanOrEqualTo(4));

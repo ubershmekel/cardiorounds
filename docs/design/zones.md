@@ -8,20 +8,20 @@ heart rate minus resting heart rate, which the user sets in Settings.
 
 ## Zone definitions
 
-| Zone | Name     | % of min-to-max HR | Color  | Feel                               |
-| ---- | -------- | ------------------ | ------ | ---------------------------------- |
-| Z1   | Rest     | < 60%              | gray   | Walking, warm-up, chatting         |
-| Z2   | Light    | 60 – 70%           | blue   | Easy pace, can hold a conversation |
-| Z3   | Moderate | 70 – 80%           | green  | Steady effort, breathing harder    |
-| Z4   | Hard     | 80 – 90%           | orange | Threshold, hard to speak           |
-| Z5   | Max      | > 90%              | pink   | All-out, unsustainable             |
+| Zone | Name        | % of min-to-max HR | Color  | Feel                               |
+| ---- | ----------- | ------------------ | ------ | ---------------------------------- |
+| Z1   | Recovery    | < 60%              | gray   | Walking, warm-up, chatting         |
+| Z2   | Sustainable | 60 – 70%           | blue   | Easy pace, can hold a conversation |
+| Z3   | Pushing     | 70 – 80%           | green  | Steady effort, breathing harder    |
+| Z4   | Hard        | 80 – 90%           | orange | Threshold, hard to speak           |
+| Z5   | All Out     | > 90%              | pink   | All-out, unsustainable             |
 
 ## Without a max HR
 
 If the user has not set a max HR, zone coloring is disabled on both the
-recording screen and the workout review screen. Both show a single neutral
-color for the chart line. A small prompt links to Settings to unlock zones.
-The settings screen also shows this prompt prominently when max HR is absent.
+recording screen and the workout review screen. Both show a single neutral color
+for the chart line. A small prompt links to Settings to unlock zones. The
+settings screen also shows this prompt prominently when max HR is absent.
 
 A rough default (220 − age) is intentionally not used — it varies too much
 between individuals and would produce misleading zone boundaries.

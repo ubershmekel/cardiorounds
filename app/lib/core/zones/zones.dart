@@ -6,11 +6,11 @@ import '../../app/colors.dart';
 /// athlete's heart-rate reserve (HRR = max HR - resting HR), per Karvonen.
 /// See docs/design/zones.md for the user-facing definitions.
 enum Zone {
-  z1('Z1', 'Rest', 0.0, 0.60, AppColors.zoneRest),
-  z2('Z2', 'Light', 0.60, 0.70, AppColors.zoneLight),
-  z3('Z3', 'Moderate', 0.70, 0.80, AppColors.zoneModerate),
+  z1('Z1', 'Recovery', 0.0, 0.60, AppColors.zoneRest),
+  z2('Z2', 'Sustainable', 0.60, 0.70, AppColors.zoneLight),
+  z3('Z3', 'Pushing', 0.70, 0.80, AppColors.zoneModerate),
   z4('Z4', 'Hard', 0.80, 0.90, AppColors.zoneHard),
-  z5('Z5', 'Max', 0.90, double.infinity, AppColors.zoneMax);
+  z5('Z5', 'All Out', 0.90, double.infinity, AppColors.zoneMax);
 
   const Zone(
     this.shortLabel,
@@ -23,7 +23,7 @@ enum Zone {
   /// "Z1", "Z2", etc. — short tag for compact UI.
   final String shortLabel;
 
-  /// "Rest", "Light", "Moderate", "Hard", "Max".
+  /// Coach-like effort label shown in the UI.
   final String name;
 
   /// Lower bound of this zone as a fraction of HRR. Z1 starts at 0
