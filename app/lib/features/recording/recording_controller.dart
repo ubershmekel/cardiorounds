@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/app_logger.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 import '../../core/hr/fake_hr_source.dart';
@@ -59,6 +60,7 @@ class RecordingController extends StateNotifier<RecordingState> {
            stopped: false,
          ),
        ) {
+    appLog('Recording', 'Started activity $activityId on ${source.deviceName}');
     _sub = source.samples.listen(_onSample);
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && !state.stopped) state = state.copyWith(now: DateTime.now());
@@ -73,6 +75,9 @@ class RecordingController extends StateNotifier<RecordingState> {
 
   Future<void> _onSample(HrSample sample) async {
     if (state.stopped) return;
+    if (sample.bpm == null) {
+      appLog('Recording', 'Null BPM received from ${source.deviceName} — device may have disconnected');
+    }
     final tMs = sample.at.difference(_started).inMilliseconds;
     await db.insertSample(
       activityId: state.activityId,
@@ -90,6 +95,7 @@ class RecordingController extends StateNotifier<RecordingState> {
 
   Future<void> stop() async {
     if (state.stopped) return;
+    appLog('Recording', 'Stopping activity ${state.activityId} on ${source.deviceName} after ${state.elapsed.inSeconds}s');
     state = state.copyWith(stopped: true);
     final elapsedMs = DateTime.now().difference(_started).inMilliseconds;
     await db.finalizeActivity(

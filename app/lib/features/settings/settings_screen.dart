@@ -1,7 +1,12 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../../core/app_logger.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 
@@ -182,7 +187,69 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           title: const Text('App version'),
           subtitle: Text(kAppVersion),
         ),
+        ...[
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 8),
+          Text(
+            'Advanced',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.download_outlined),
+            label: const Text('Export database'),
+            onPressed: () => _exportFile(
+              context,
+              getFile: AppDatabase.databaseFile,
+              subject: 'Cardio Rounds database',
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.article_outlined),
+            label: const Text('Export logs'),
+            onPressed: () => _exportFile(
+              context,
+              getFile: AppLogger.instance.resolveLogFile,
+              subject: 'Cardio Rounds logs',
+            ),
+          ),
+        ],
       ],
+    );
+  }
+
+  Future<void> _exportFile(
+    BuildContext context, {
+    required Future<File?> Function() getFile,
+    required String subject,
+  }) async {
+    if (kIsWeb) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$subject export not available on web')),
+      );
+      return;
+    }
+    final file = await getFile();
+    if (file == null || !await file.exists()) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('File not found')));
+      return;
+    }
+    if (!context.mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      subject: subject,
+      sharePositionOrigin: box == null
+          ? null
+          : box.localToGlobal(Offset.zero) & box.size,
     );
   }
 }

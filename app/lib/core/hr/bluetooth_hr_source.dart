@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
+import '../app_logger.dart';
 import 'hr_source.dart';
 
 final Guid hrServiceGuid = Guid('0000180d-0000-1000-8000-00805f9b34fb');
@@ -44,12 +45,15 @@ class BluetoothHeartRateSource implements HeartRateSource {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     final displayName = _bestName(device);
+    appLog('BT', 'Connecting to $displayName (${device.remoteId.str})');
     await device.connect(
       timeout: timeout,
       autoConnect: false,
       license: License.free,
     );
+    appLog('BT', 'Connected to $displayName, discovering services');
     final services = await device.discoverServices();
+    appLog('BT', 'Discovered ${services.length} services on $displayName');
     final hrService = services.firstWhere(
       (s) => s.uuid == hrServiceGuid,
       orElse: () => throw StateError(
@@ -63,6 +67,7 @@ class BluetoothHeartRateSource implements HeartRateSource {
       ),
     );
     await measurement.setNotifyValue(true);
+    appLog('BT', 'Notifications enabled on $displayName — ready');
 
     final source = BluetoothHeartRateSource._(device, displayName);
     source._measurementSub = measurement.lastValueStream.listen((data) {
@@ -70,6 +75,7 @@ class BluetoothHeartRateSource implements HeartRateSource {
       source._samples.add(HrSample(bpm: bpm, at: DateTime.now()));
     });
     source._connectionSub = device.connectionState.listen((s) {
+      appLog('BT', '$displayName connection state: $s');
       if (s == BluetoothConnectionState.disconnected && !source._disposed) {
         source._samples.add(HrSample(bpm: null, at: DateTime.now()));
       }
@@ -87,6 +93,7 @@ class BluetoothHeartRateSource implements HeartRateSource {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    appLog('BT', 'Disposing source for $_displayName');
     await _measurementSub?.cancel();
     await _connectionSub?.cancel();
     try {

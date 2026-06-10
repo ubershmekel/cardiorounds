@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
+import '../app_logger.dart';
 import 'bluetooth_hr_source.dart';
 
 class BluetoothHrScanner {
@@ -16,12 +17,16 @@ class BluetoothHrScanner {
   Future<void> start({
     Duration timeout = const Duration(seconds: 30),
   }) async {
+    appLog('BTScan', 'Starting scan (timeout: ${timeout.inSeconds}s)');
     _seen.clear();
     _sub?.cancel();
     _sub = FlutterBluePlus.scanResults.listen((batch) {
       var changed = false;
       for (final r in batch) {
-        if (_seen.add(r.device.remoteId)) changed = true;
+        if (_seen.add(r.device.remoteId)) {
+          changed = true;
+          appLog('BTScan', 'Found device: ${r.device.platformName.isNotEmpty ? r.device.platformName : r.device.remoteId.str} RSSI=${r.rssi}');
+        }
       }
       if (changed) {
         _results.add(_dedupedSorted());
@@ -44,6 +49,7 @@ class BluetoothHrScanner {
   }
 
   Future<void> stop() async {
+    appLog('BTScan', 'Stopping scan');
     await FlutterBluePlus.stopScan();
     await _sub?.cancel();
     _sub = null;
