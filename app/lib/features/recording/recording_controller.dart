@@ -62,8 +62,18 @@ class RecordingController extends StateNotifier<RecordingState> {
        ) {
     appLog('Recording', 'Started activity $activityId on ${source.deviceName}');
     _sub = source.samples.listen(_onSample);
+
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && !state.stopped) state = state.copyWith(now: DateTime.now());
+      // Drives elapsed time in the UI when no HR sample arrives that second.
+      if (mounted && !state.stopped) {
+        state = state.copyWith(now: DateTime.now());
+      }
+    });
+    _statsTicker = Timer.periodic(const Duration(minutes: 1), (_) {
+      // Log samples for easier debugging to see when things are going ok.
+      final count = _sampleCount;
+      _sampleCount = 0;
+      appLog('Recording', '$count samples in last 60s (activity $activityId)');
     });
   }
 
@@ -72,12 +82,18 @@ class RecordingController extends StateNotifier<RecordingState> {
   final DateTime _started;
   late final StreamSubscription<HrSample> _sub;
   late final Timer _ticker;
+  late final Timer _statsTicker;
+  int _sampleCount = 0;
 
   Future<void> _onSample(HrSample sample) async {
     if (state.stopped) return;
     if (sample.bpm == null) {
-      appLog('Recording', 'Null BPM received from ${source.deviceName} — device may have disconnected');
+      appLog(
+        'Recording',
+        'Null BPM received from ${source.deviceName} — device may have disconnected',
+      );
     }
+    _sampleCount++;
     final tMs = sample.at.difference(_started).inMilliseconds;
     await db.insertSample(
       activityId: state.activityId,
@@ -95,7 +111,10 @@ class RecordingController extends StateNotifier<RecordingState> {
 
   Future<void> stop() async {
     if (state.stopped) return;
-    appLog('Recording', 'Stopping activity ${state.activityId} on ${source.deviceName} after ${state.elapsed.inSeconds}s');
+    appLog(
+      'Recording',
+      'Stopping activity ${state.activityId} on ${source.deviceName} after ${state.elapsed.inSeconds}s',
+    );
     state = state.copyWith(stopped: true);
     final elapsedMs = DateTime.now().difference(_started).inMilliseconds;
     await db.finalizeActivity(
@@ -104,12 +123,14 @@ class RecordingController extends StateNotifier<RecordingState> {
     );
     await _sub.cancel();
     _ticker.cancel();
+    _statsTicker.cancel();
     await source.dispose();
   }
 
   @override
   void dispose() {
     _ticker.cancel();
+    _statsTicker.cancel();
     _sub.cancel();
     if (!state.stopped) {
       source.dispose();
@@ -120,23 +141,23 @@ class RecordingController extends StateNotifier<RecordingState> {
 
 final recordingControllerProvider = StateNotifierProvider.autoDispose
     .family<RecordingController, RecordingState, int>((ref, activityId) {
-  final db = ref.watch(databaseProvider);
-  // Picker writes here before navigating to the recording screen. Fall back to
-  // a synthetic source if someone deep-links into /recording/:id directly.
-  final source = ref.read(pendingHrSourceProvider) ?? FakeHeartRateSource();
-  // Clear the slot AFTER this provider finishes initializing. Mutating another
-  // provider inline would trip Riverpod's "providers can't modify each other
-  // during build" guard.
-  Future.microtask(() {
-    try {
-      ref.read(pendingHrSourceProvider.notifier).state = null;
-    } catch (_) {
-      // Container may be disposed by then; safe to swallow.
-    }
-  });
-  return RecordingController(
-    db: db,
-    source: source,
-    activityId: activityId,
-  );
-});
+      final db = ref.watch(databaseProvider);
+      // Picker writes here before navigating to the recording screen. Fall back to
+      // a synthetic source if someone deep-links into /recording/:id directly.
+      final source = ref.read(pendingHrSourceProvider) ?? FakeHeartRateSource();
+      // Clear the slot AFTER this provider finishes initializing. Mutating another
+      // provider inline would trip Riverpod's "providers can't modify each other
+      // during build" guard.
+      Future.microtask(() {
+        try {
+          ref.read(pendingHrSourceProvider.notifier).state = null;
+        } catch (_) {
+          // Container may be disposed by then; safe to swallow.
+        }
+      });
+      return RecordingController(
+        db: db,
+        source: source,
+        activityId: activityId,
+      );
+    });
