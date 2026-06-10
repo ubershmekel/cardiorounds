@@ -117,6 +117,22 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
         ),
         const SizedBox(height: 16),
         TextField(
+          controller: _restingHrController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'Resting heart rate (bpm)',
+            helperText: 'Leave empty if unknown',
+            border: OutlineInputBorder(),
+            suffixIcon: Tooltip(
+              message: 'Measure first thing in the morning, lying still.',
+              child: Icon(Icons.help_outline),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
           controller: _maxHrController,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -128,23 +144,6 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
             suffixIcon: Tooltip(
               message:
                   'Used for zone thresholds. Estimate: 220 minus your age; measure with a hard interval session for accuracy.',
-              child: Icon(Icons.help_outline),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _restingHrController,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            labelText: 'Resting heart rate (bpm)',
-            helperText: 'Leave empty if unknown',
-            border: OutlineInputBorder(),
-            suffixIcon: Tooltip(
-              message:
-                  'Measure first thing in the morning, lying still, with a strap or fingertip.',
               child: Icon(Icons.help_outline),
             ),
           ),
