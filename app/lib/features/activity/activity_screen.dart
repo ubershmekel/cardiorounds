@@ -6,6 +6,7 @@ import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 import '../../core/zones/zone_times.dart';
 import '../../core/zones/zones.dart';
+import 'activity_duration.dart';
 import 'hr_chart.dart';
 import 'hr_stats.dart';
 import 'hr_stats_row.dart';
@@ -235,6 +236,11 @@ class _ActivityBody extends StatelessWidget {
     final workoutEnd = marker == null
         ? null
         : marker.tMs + (marker.durationMs ?? 0);
+    final displayDurationMs = effectiveActivityDurationMs(
+      activityDurationMs: activity.durationMs,
+      workoutStartMs: workoutStart,
+      workoutDurationMs: marker?.durationMs,
+    );
 
     final timedHeartRates = rows.map((r) => (tMs: r.tMs, hr: r.hr));
     final stats = HrStats.fromTimedHeartRates(
@@ -259,7 +265,7 @@ class _ActivityBody extends StatelessWidget {
 
     final meta = [
       _formatDate(activity.startedAtMs),
-      _formatDuration(activity.durationMs),
+      _formatDuration(displayDurationMs),
       if (activity.sportType != null) activity.sportType!,
     ].join('  ·  ');
 

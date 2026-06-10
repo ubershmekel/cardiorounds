@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
+import '../activity/activity_duration.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -135,7 +136,7 @@ class _ActivityList extends StatelessWidget {
   }
 }
 
-class _ActivityRow extends StatelessWidget {
+class _ActivityRow extends ConsumerWidget {
   const _ActivityRow({required this.activity});
 
   final Activity activity;
@@ -156,9 +157,15 @@ class _ActivityRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final marker = ref.watch(workoutMarkerProvider(activity.id)).valueOrNull;
+    final durationMs = effectiveActivityDurationMs(
+      activityDurationMs: activity.durationMs,
+      workoutStartMs: marker?.tMs,
+      workoutDurationMs: marker?.durationMs,
+    );
     final subtitle =
-        '${_formatDate(activity.startedAtMs)} · ${_formatDuration(activity.durationMs)}';
+        '${_formatDate(activity.startedAtMs)} · ${_formatDuration(durationMs)}';
     return ListTile(
       title: Text(activity.name ?? activity.sportType ?? 'Workout'),
       subtitle: Text(subtitle),
