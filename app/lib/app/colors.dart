@@ -15,9 +15,9 @@ abstract final class AppColors {
   static const Color outline = Color(0xFF2A2A40);
 
   // Zone colors
-  static const Color zoneRest = Color(0xFF6B6B80);     // Z1 — cool gray
-  static const Color zoneLight = hotBlue;               // Z2 — same as hotBlue
-  static const Color zoneModerate = Color(0xFF00E676);  // Z3 — neon green
-  static const Color zoneHard = Color(0xFFFF6B00);      // Z4 — hot orange
-  static const Color zoneMax = hotPink;                 // Z5 — same as hotPink
+  static const Color zoneBaseline = Color(0xFF6B6B80); // Z1 — cool gray
+  static const Color zoneLight = hotBlue; // Z2 — same as hotBlue
+  static const Color zoneModerate = Color(0xFF00E676); // Z3 — neon green
+  static const Color zoneHard = Color(0xFFFF6B00); // Z4 — hot orange
+  static const Color zoneMax = hotPink; // Z5 — same as hotPink
 }

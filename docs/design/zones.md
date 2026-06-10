@@ -10,7 +10,7 @@ heart rate minus resting heart rate, which the user sets in Settings.
 
 | Zone | Name        | % of min-to-max HR | Color  | Feel                               |
 | ---- | ----------- | ------------------ | ------ | ---------------------------------- |
-| Z1   | Recovery    | < 60%              | gray   | Walking, warm-up, chatting         |
+| Z1   | Baseline    | < 60%              | gray   | Walking, warm-up, chatting         |
 | Z2   | Sustainable | 60 – 70%           | blue   | Easy pace, can hold a conversation |
 | Z3   | Pushing     | 70 – 80%           | green  | Steady effort, breathing harder    |
 | Z4   | Hard        | 80 – 90%           | orange | Threshold, hard to speak           |

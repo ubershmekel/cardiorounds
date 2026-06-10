@@ -6,7 +6,7 @@ import '../../app/colors.dart';
 /// athlete's heart-rate reserve (HRR = max HR - resting HR), per Karvonen.
 /// See docs/design/zones.md for the user-facing definitions.
 enum Zone {
-  z1('Z1', 'Recovery', 0.0, 0.60, AppColors.zoneRest),
+  z1('Z1', 'Baseline', 0.0, 0.60, AppColors.zoneBaseline),
   z2('Z2', 'Sustainable', 0.60, 0.70, AppColors.zoneLight),
   z3('Z3', 'Pushing', 0.70, 0.80, AppColors.zoneModerate),
   z4('Z4', 'Hard', 0.80, 0.90, AppColors.zoneHard),
