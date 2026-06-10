@@ -28,8 +28,10 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   bool _controllersInitialized = false;
   final _nameController = TextEditingController();
   final _noteController = TextEditingController();
+  final _sportTypeController = TextEditingController();
   final _nameFocus = FocusNode();
   final _noteFocus = FocusNode();
+  final _sportTypeFocus = FocusNode();
 
   @override
   void initState() {
@@ -42,21 +44,29 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     _noteFocus.addListener(() {
       if (!_noteFocus.hasFocus) _save(note: _noteController.text);
     });
+    _sportTypeFocus.addListener(() {
+      if (!_sportTypeFocus.hasFocus) _save(sportType: _sportTypeController.text);
+    });
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _noteController.dispose();
+    _sportTypeController.dispose();
     _nameFocus.dispose();
     _noteFocus.dispose();
+    _sportTypeFocus.dispose();
     super.dispose();
   }
 
-  void _save({String? name, String? note}) {
-    ref
-        .read(databaseProvider)
-        .updateActivity(activityId: widget.activityId, name: name, note: note);
+  void _save({String? name, String? note, String? sportType}) {
+    ref.read(databaseProvider).updateActivity(
+      activityId: widget.activityId,
+      name: name,
+      note: note,
+      sportType: sportType,
+    );
   }
 
   @override
@@ -75,6 +85,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         _controllersInitialized = true;
         _nameController.text = a.name ?? '';
         _noteController.text = a.note ?? '';
+        _sportTypeController.text = a.sportType ?? '';
       }
     });
 
@@ -112,6 +123,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             nameFocusNode: _nameFocus,
             noteController: _noteController,
             noteFocusNode: _noteFocus,
+            sportTypeController: _sportTypeController,
+            sportTypeFocusNode: _sportTypeFocus,
             onNameSubmitted: (_) => _noteFocus.requestFocus(),
             onOpenSettings: () => context.go('/settings'),
             onWorkoutChanged: (start, end) {
@@ -142,6 +155,8 @@ class _ActivityBody extends StatelessWidget {
     required this.nameFocusNode,
     required this.noteController,
     required this.noteFocusNode,
+    required this.sportTypeController,
+    required this.sportTypeFocusNode,
     required this.onNameSubmitted,
     required this.onOpenSettings,
     required this.onWorkoutChanged,
@@ -157,6 +172,8 @@ class _ActivityBody extends StatelessWidget {
   final FocusNode nameFocusNode;
   final TextEditingController noteController;
   final FocusNode noteFocusNode;
+  final TextEditingController sportTypeController;
+  final FocusNode sportTypeFocusNode;
   final ValueChanged<String> onNameSubmitted;
   final VoidCallback onOpenSettings;
   final void Function(int startMs, int endMs) onWorkoutChanged;
@@ -266,7 +283,6 @@ class _ActivityBody extends StatelessWidget {
     final meta = [
       _formatDate(activity.startedAtMs),
       _formatDuration(displayDurationMs),
-      if (activity.sportType != null) activity.sportType!,
     ].join('  ·  ');
 
     final thirds = _computeThirds(workoutStart, workoutEnd);
@@ -303,6 +319,19 @@ class _ActivityBody extends StatelessWidget {
                 ),
                 decoration: InputDecoration(
                   hintText: 'Add a note…',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              TextField(
+                controller: sportTypeController,
+                focusNode: sportTypeFocusNode,
+                textInputAction: TextInputAction.done,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Sport type…',
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                 ),

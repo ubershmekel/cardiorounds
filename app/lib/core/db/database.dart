@@ -103,11 +103,13 @@ class AppDatabase extends _$AppDatabase {
     required int activityId,
     String? name,
     String? note,
+    String? sportType,
   }) {
     return (update(activities)..where((a) => a.id.equals(activityId))).write(
       ActivitiesCompanion(
         name: name == null ? const Value.absent() : Value(name.isEmpty ? null : name),
         note: note == null ? const Value.absent() : Value(note.isEmpty ? null : note),
+        sportType: sportType == null ? const Value.absent() : Value(sportType.isEmpty ? null : sportType),
         updatedAtMs: Value(DateTime.now().millisecondsSinceEpoch),
       ),
     );
