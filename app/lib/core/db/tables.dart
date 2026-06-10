@@ -1,12 +1,14 @@
 import 'package:drift/drift.dart';
 
+// Schema for the database tables
+// See docs/design/data-model.md for the data model.
+
 class Athletes extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
   IntColumn get restingHeartrate =>
       integer().nullable().named('resting_heartrate')();
-  IntColumn get maxHeartrate =>
-      integer().nullable().named('max_heartrate')();
+  IntColumn get maxHeartrate => integer().nullable().named('max_heartrate')();
   IntColumn get createdAtMs => integer().named('created_at_ms')();
 }
 

@@ -97,3 +97,7 @@ painful migration later.
 
 The load score (extra beats above resting HR) is computed over the `workout`
 span marker window when one exists, otherwise over the full `duration_ms`.
+
+## Files
+
+- [app/lib/core/db/tables.dart](../../app/lib/core/db/tables.dart)
