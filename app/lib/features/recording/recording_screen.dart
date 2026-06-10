@@ -11,7 +11,7 @@ import '../activity/hr_stats_row.dart';
 import '../activity/zone_breakdown.dart';
 import 'recording_controller.dart';
 
-const int _liveWindowMs = 5 * 60 * 1000;
+const int _liveWindowMs = 15 * 60 * 1000;
 
 class RecordingScreen extends ConsumerWidget {
   const RecordingScreen({super.key, required this.activityId});

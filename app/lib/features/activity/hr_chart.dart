@@ -818,7 +818,13 @@ class _TrailingZoomableHrChartState extends State<TrailingZoomableHrChart> {
   @override
   void didUpdateWidget(TrailingZoomableHrChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _spanMs = _clampSpan(_spanMs);
+    // Do not clamp _spanMs here as new samples arrive. Early in a recording the
+    // full span may be only a few seconds, and clamping would permanently shrink
+    // the intended default history window. Only reset when the configured
+    // default itself changes.
+    if (oldWidget.initialSpanMs != widget.initialSpanMs) {
+      _spanMs = widget.initialSpanMs;
+    }
   }
 
   void _onScaleStart(ScaleStartDetails _) {
