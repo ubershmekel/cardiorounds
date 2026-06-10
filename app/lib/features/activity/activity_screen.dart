@@ -106,6 +106,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             workoutMarker: marker.valueOrNull,
             editing: _editing,
             zoneSetup: zoneSetup,
+            restingHr: athlete?.restingHeartrate,
             nameController: _nameController,
             nameFocusNode: _nameFocus,
             noteController: _noteController,
@@ -135,6 +136,7 @@ class _ActivityBody extends StatelessWidget {
     required this.workoutMarker,
     required this.editing,
     required this.zoneSetup,
+    this.restingHr,
     required this.nameController,
     required this.nameFocusNode,
     required this.noteController,
@@ -149,6 +151,7 @@ class _ActivityBody extends StatelessWidget {
   final Marker? workoutMarker;
   final bool editing;
   final ZoneSetup? zoneSetup;
+  final int? restingHr;
   final TextEditingController nameController;
   final FocusNode nameFocusNode;
   final TextEditingController noteController;
@@ -174,6 +177,53 @@ class _ActivityBody extends StatelessWidget {
     final min = d.minute.toString().padLeft(2, '0');
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-'
         '${d.day.toString().padLeft(2, '0')} $hh:$min';
+  }
+
+  /// Average HR for each time-third of the workout window.
+  List<int?> _computeThirds(int? startMs, int? endMs) {
+    final filtered = rows.where((r) {
+      if (startMs != null && r.tMs < startMs) return false;
+      if (endMs != null && r.tMs > endMs) return false;
+      return true;
+    }).toList();
+    if (filtered.length < 3) return [null, null, null];
+    final t0 = filtered.first.tMs;
+    final t1 = filtered.last.tMs;
+    if (t0 == t1) return [null, null, null];
+    final span = (t1 - t0) / 3;
+    return List.generate(3, (i) {
+      final lo = t0 + (span * i).round();
+      final hi = t0 + (span * (i + 1)).round();
+      return HrStats.fromHeartRates(
+        filtered.where((r) => r.tMs >= lo && r.tMs < hi).map((r) => r.hr),
+      ).avg;
+    });
+  }
+
+  /// Total extra beats above resting HR, integrated over workout window.
+  /// Units: beats (bpm × minutes = beats).
+  int? _computeExtraBeats(int? startMs, int? endMs) {
+    final resting = restingHr;
+    if (resting == null) return null;
+    final filtered = rows.where((r) {
+      if (startMs != null && r.tMs < startMs) return false;
+      if (endMs != null && r.tMs > endMs) return false;
+      return r.hr != null && r.hr! > 0;
+    }).toList();
+    if (filtered.length < 2) return null;
+    double extra = 0;
+    for (int i = 0; i < filtered.length - 1; i++) {
+      final hr = filtered[i].hr;
+      if (hr == null || hr <= 0) continue;
+      final dtMin = (filtered[i + 1].tMs - filtered[i].tMs) / 60000;
+      extra += (hr - resting).clamp(0, 9999) * dtMin;
+    }
+    return extra.round();
+  }
+
+  String _formatBeats(int beats) {
+    if (beats >= 1000) return '${(beats / 1000).toStringAsFixed(1)}K';
+    return beats.toString();
   }
 
   @override
@@ -213,10 +263,14 @@ class _ActivityBody extends StatelessWidget {
       if (activity.sportType != null) activity.sportType!,
     ].join('  ·  ');
 
-    return Center(
+    final thirds = _computeThirds(workoutStart, workoutEnd);
+    final extraBeats = _computeExtraBeats(workoutStart, workoutEnd);
+
+    return Align(
+      alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -255,7 +309,8 @@ class _ActivityBody extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              Expanded(
+              SizedBox(
+                height: 220,
                 child: editing
                     ? EditableHrChart(
                         points: points,
@@ -290,16 +345,65 @@ class _ActivityBody extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 16),
-              HrStatsRow(stats: stats),
-              const SizedBox(height: 24),
               if (zoneSetup == null)
                 ZoneLockedPrompt(onTap: onOpenSettings)
               else
                 ZoneBreakdown(setup: zoneSetup!, times: zoneTimes!),
+              const SizedBox(height: 24),
+              Text('Heart rate stats', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              HrStatsRow(stats: stats),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _TrendStat(label: '1st third', value: thirds[0]),
+                  _TrendStat(label: '2nd third', value: thirds[1]),
+                  _TrendStat(label: '3rd third', value: thirds[2]),
+                ],
+              ),
+              if (extraBeats != null) ...[
+                const SizedBox(height: 16),
+                Center(
+                  child: _TrendStat(
+                    label: 'extra beats',
+                    valueText: _formatBeats(extraBeats),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TrendStat extends StatelessWidget {
+  const _TrendStat({required this.label, this.value, this.valueText});
+
+  final String label;
+  final int? value;
+  final String? valueText;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Text(
+          valueText ?? value?.toString() ?? '--',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          label,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }
