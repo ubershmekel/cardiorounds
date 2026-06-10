@@ -53,11 +53,9 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   }
 
   void _save({String? name, String? note}) {
-    ref.read(databaseProvider).updateActivity(
-      activityId: widget.activityId,
-      name: name,
-      note: note,
-    );
+    ref
+        .read(databaseProvider)
+        .updateActivity(activityId: widget.activityId, name: name, note: note);
   }
 
   @override
@@ -164,15 +162,18 @@ class _ActivityBody extends StatelessWidget {
     final h = totalSec ~/ 3600;
     final m = (totalSec % 3600) ~/ 60;
     final s = totalSec % 60;
-    final mm = m.toString().padLeft(2, '0');
     final ss = s.toString().padLeft(2, '0');
-    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+    if (h > 0) return '${h}h ${m.toString().padLeft(2, '0')}m ${ss}s';
+    if (m > 0) return '${m}m ${ss}s';
+    return '${s}s';
   }
 
   String _formatDate(int ms) {
     final d = DateTime.fromMillisecondsSinceEpoch(ms);
+    final hh = d.hour.toString().padLeft(2, '0');
+    final min = d.minute.toString().padLeft(2, '0');
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-'
-        '${d.day.toString().padLeft(2, '0')}';
+        '${d.day.toString().padLeft(2, '0')} $hh:$min';
   }
 
   @override
