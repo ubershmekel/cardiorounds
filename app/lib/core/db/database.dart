@@ -99,6 +99,20 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  Future<void> updateActivity({
+    required int activityId,
+    String? name,
+    String? note,
+  }) {
+    return (update(activities)..where((a) => a.id.equals(activityId))).write(
+      ActivitiesCompanion(
+        name: name == null ? const Value.absent() : Value(name.isEmpty ? null : name),
+        note: note == null ? const Value.absent() : Value(note.isEmpty ? null : note),
+        updatedAtMs: Value(DateTime.now().millisecondsSinceEpoch),
+      ),
+    );
+  }
+
   Future<void> finalizeActivity({
     required int activityId,
     required int durationMs,

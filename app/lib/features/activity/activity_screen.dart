@@ -24,6 +24,41 @@ class ActivityScreen extends ConsumerStatefulWidget {
 
 class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   bool _editing = false;
+  bool _controllersInitialized = false;
+  final _nameController = TextEditingController();
+  final _noteController = TextEditingController();
+  final _nameFocus = FocusNode();
+  final _noteFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    // FocusNodes let us (1) save to DB when the user taps away (hasFocus → false)
+    // and (2) jump focus from name to note on Enter (see onNameSubmitted).
+    _nameFocus.addListener(() {
+      if (!_nameFocus.hasFocus) _save(name: _nameController.text);
+    });
+    _noteFocus.addListener(() {
+      if (!_noteFocus.hasFocus) _save(note: _noteController.text);
+    });
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _noteController.dispose();
+    _nameFocus.dispose();
+    _noteFocus.dispose();
+    super.dispose();
+  }
+
+  void _save({String? name, String? note}) {
+    ref.read(databaseProvider).updateActivity(
+      activityId: widget.activityId,
+      name: name,
+      note: note,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +70,14 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
       maxHr: athlete?.maxHeartrate,
       restingHr: athlete?.restingHeartrate,
     );
+
+    activity.whenData((a) {
+      if (!_controllersInitialized) {
+        _controllersInitialized = true;
+        _nameController.text = a.name ?? '';
+        _noteController.text = a.note ?? '';
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -65,6 +108,11 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             workoutMarker: marker.valueOrNull,
             editing: _editing,
             zoneSetup: zoneSetup,
+            nameController: _nameController,
+            nameFocusNode: _nameFocus,
+            noteController: _noteController,
+            noteFocusNode: _noteFocus,
+            onNameSubmitted: (_) => _noteFocus.requestFocus(),
             onOpenSettings: () => context.go('/settings'),
             onWorkoutChanged: (start, end) {
               ref
@@ -89,6 +137,11 @@ class _ActivityBody extends StatelessWidget {
     required this.workoutMarker,
     required this.editing,
     required this.zoneSetup,
+    required this.nameController,
+    required this.nameFocusNode,
+    required this.noteController,
+    required this.noteFocusNode,
+    required this.onNameSubmitted,
     required this.onOpenSettings,
     required this.onWorkoutChanged,
   });
@@ -98,6 +151,11 @@ class _ActivityBody extends StatelessWidget {
   final Marker? workoutMarker;
   final bool editing;
   final ZoneSetup? zoneSetup;
+  final TextEditingController nameController;
+  final FocusNode nameFocusNode;
+  final TextEditingController noteController;
+  final FocusNode noteFocusNode;
+  final ValueChanged<String> onNameSubmitted;
   final VoidCallback onOpenSettings;
   final void Function(int startMs, int endMs) onWorkoutChanged;
 
@@ -162,6 +220,33 @@ class _ActivityBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              TextField(
+                controller: nameController,
+                focusNode: nameFocusNode,
+                onSubmitted: onNameSubmitted,
+                textInputAction: TextInputAction.next,
+                style: theme.textTheme.titleLarge,
+                decoration: InputDecoration(
+                  hintText: 'Add a name…',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              TextField(
+                controller: noteController,
+                focusNode: noteFocusNode,
+                maxLines: null,
+                textInputAction: TextInputAction.done,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Add a note…',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const SizedBox(height: 4),
               Text(
                 meta,
                 style: theme.textTheme.bodyMedium?.copyWith(

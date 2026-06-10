@@ -13,7 +13,7 @@ Implementation tasks in priority order. Check off when merged to main.
 - Bluetooth: handle disconnect during recording (NULL samples, reconnecting
   banner, auto-reconnect)
 - Interrupted recording recovery: detect incomplete activity on launch, prompt
-  user to continue or discard
+  user to continue or not
 - Recording screen: sport-type field pre-filled from last session
 - One-minute recovery capture after Stop, before navigating to review
 
