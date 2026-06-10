@@ -203,6 +203,16 @@ class AppDatabase extends _$AppDatabase {
           ..limit(1))
         .getSingleOrNull();
   }
+
+  Future<Device?> onlyKnownDevice() async {
+    // limit(2) so we can distinguish "exactly one" from "one of many" without fetching all rows
+    final rememberedDevices =
+        await (select(devices)
+              ..orderBy([(d) => OrderingTerm.desc(d.lastConnectedAtMs)])
+              ..limit(2))
+            .get();
+    return rememberedDevices.length == 1 ? rememberedDevices.single : null;
+  }
 }
 
 QueryExecutor _openConnection() {
