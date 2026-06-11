@@ -115,6 +115,10 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  Future<void> deleteActivity(int activityId) {
+    return (delete(activities)..where((a) => a.id.equals(activityId))).go();
+  }
+
   Future<void> finalizeActivity({
     required int activityId,
     required int durationMs,

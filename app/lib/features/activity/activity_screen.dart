@@ -136,6 +136,31 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                     durationMs: end - start,
                   );
             },
+            onDelete: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Delete activity?'),
+                  content: const Text('This cannot be undone.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true && context.mounted) {
+                await ref
+                    .read(databaseProvider)
+                    .deleteActivity(widget.activityId);
+                if (context.mounted) context.go('/home');
+              }
+            },
           ),
         ),
       ),
@@ -160,6 +185,7 @@ class _ActivityBody extends StatelessWidget {
     required this.onNameSubmitted,
     required this.onOpenSettings,
     required this.onWorkoutChanged,
+    required this.onDelete,
   });
 
   final Activity activity;
@@ -177,6 +203,7 @@ class _ActivityBody extends StatelessWidget {
   final ValueChanged<String> onNameSubmitted;
   final VoidCallback onOpenSettings;
   final void Function(int startMs, int endMs) onWorkoutChanged;
+  final VoidCallback onDelete;
 
   String _formatDuration(int ms) {
     final totalSec = ms ~/ 1000;
@@ -406,6 +433,14 @@ class _ActivityBody extends StatelessWidget {
                   ),
                 ),
               ],
+              const SizedBox(height: 32),
+              TextButton.icon(
+                onPressed: onDelete,
+                icon: Icon(Icons.delete_outline,
+                    color: theme.colorScheme.error),
+                label: Text('Delete activity',
+                    style: TextStyle(color: theme.colorScheme.error)),
+              ),
             ],
           ),
         ),
