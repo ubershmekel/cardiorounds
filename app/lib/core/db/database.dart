@@ -203,6 +203,19 @@ class AppDatabase extends _$AppDatabase {
     return (select(devices)..where((d) => d.id.equals(id))).getSingle();
   }
 
+  /// Every sport type used so far, most recently used first. Used to pre-fill
+  /// and auto-complete the sport-type field when starting a new recording.
+  Future<List<String>> distinctSportTypes() async {
+    final lastUsed = activities.startedAtMs.max();
+    final query = selectOnly(activities)
+      ..addColumns([activities.sportType, lastUsed])
+      ..where(activities.sportType.isNotNull())
+      ..groupBy([activities.sportType])
+      ..orderBy([OrderingTerm.desc(lastUsed)]);
+    final rows = await query.get();
+    return [for (final row in rows) ?row.read(activities.sportType)];
+  }
+
   Future<Device?> lastConnectedDevice() {
     return (select(devices)
           ..orderBy([(d) => OrderingTerm.desc(d.lastConnectedAtMs)])

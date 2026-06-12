@@ -28,6 +28,8 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   static const _autoStartDelaySeconds = 5;
 
   final _sportTypeController = TextEditingController();
+  final _sportTypeFocus = FocusNode();
+  List<String> _pastSportTypes = const [];
   BluetoothHrScanner? _scanner;
   StreamSubscription<List<ScanResult>>? _scanResultsSub;
   Timer? _scanTimer;
@@ -44,6 +46,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   @override
   void initState() {
     super.initState();
+    _prefillSportType();
     if (!kIsWeb) {
       _scanner = BluetoothHrScanner();
       _scanResultsSub = _scanner!.results.listen(_handleScanResults);
@@ -62,6 +65,18 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       appLog('Scan', 'Scan failed: $e');
     } finally {
       if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Future<void> _prefillSportType() async {
+    final pastSportTypes = await ref
+        .read(databaseProvider)
+        .distinctSportTypes();
+    if (!mounted || pastSportTypes.isEmpty) return;
+    setState(() => _pastSportTypes = pastSportTypes);
+    // Don't clobber anything the user typed while the query was in flight.
+    if (_sportTypeController.text.isEmpty) {
+      _sportTypeController.text = pastSportTypes.first;
     }
   }
 
@@ -141,6 +156,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     _autoStartTimer?.cancel();
     _scanResultsSub?.cancel();
     _sportTypeController.dispose();
+    _sportTypeFocus.dispose();
     _scanner?.dispose();
     super.dispose();
   }
@@ -214,13 +230,52 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(
-            controller: _sportTypeController,
-            decoration: const InputDecoration(
-              labelText: 'Sport type (optional)',
-              hintText: 'e.g. BJJ, Treadmill, Bike',
-              border: OutlineInputBorder(),
-            ),
+          RawAutocomplete<String>(
+            textEditingController: _sportTypeController,
+            focusNode: _sportTypeFocus,
+            optionsBuilder: (textEditingValue) {
+              final query = textEditingValue.text.trim().toLowerCase();
+              // An empty query shows the full history so past sport types are
+              // discoverable by clearing the field.
+              return _pastSportTypes.where(
+                (sport) => sport.toLowerCase().contains(query),
+              );
+            },
+            optionsViewBuilder: (context, onSelected, options) {
+              return Align(
+                alignment: Alignment.topLeft,
+                child: Material(
+                  elevation: 4,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    child: ListView(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      children: [
+                        for (final sport in options)
+                          ListTile(
+                            title: Text(sport),
+                            onTap: () => onSelected(sport),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+            fieldViewBuilder:
+                (context, controller, focusNode, onFieldSubmitted) {
+                  return TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    onSubmitted: (_) => onFieldSubmitted(),
+                    decoration: const InputDecoration(
+                      labelText: 'Sport type (optional)',
+                      hintText: 'e.g. BJJ, Treadmill, Bike',
+                      border: OutlineInputBorder(),
+                    ),
+                  );
+                },
           ),
           const SizedBox(height: 24),
           if (_error != null)
