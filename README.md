@@ -1,4 +1,4 @@
-# yheart
+# Cardio rounds
 
 An open source heart rate monitoring app. With charts, zones, and analysis
 designed for treadmill running, interval training and BJJ rounds.

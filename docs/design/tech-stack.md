@@ -41,12 +41,11 @@ from one standard tool.
 Use **flutter_test** for unit and widget tests. It is the default test
 foundation for Flutter apps.
 
-Use **flutter_lints** for static analysis by default. The Riverpod-specific
-lint plugins (`riverpod_lint` + `custom_lint`) are desirable but their
-analyzer pin currently conflicts with `drift_dev`'s analyzer pin on any
-Riverpod version — both can't coexist until the ecosystem realigns. Add
-them later as a focused change. `flutter_lints` covers the common cases
-until then.
+Use **flutter_lints** for static analysis by default. The Riverpod-specific lint
+plugins (`riverpod_lint` + `custom_lint`) are desirable but their analyzer pin
+currently conflicts with `drift_dev`'s analyzer pin on any Riverpod version —
+both can't coexist until the ecosystem realigns. Add them later as a focused
+change. `flutter_lints` covers the common cases until then.
 
 ## Persistence
 

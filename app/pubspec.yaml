@@ -1,6 +1,8 @@
 name: cardio
-description: "Cardio Rounds: a heart-rate recording app for treadmill, intervals, and BJJ rounds."
-publish_to: 'none'
+description:
+  "Cardio Rounds: a heart-rate recording app for treadmill, intervals, and BJJ
+  rounds."
+publish_to: "none"
 version: 0.1.0+1
 
 environment:
