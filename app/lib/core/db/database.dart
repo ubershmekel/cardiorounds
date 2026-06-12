@@ -53,26 +53,27 @@ class AppDatabase extends _$AppDatabase {
         restingHeartrate: clearResting
             ? const Value<int?>(null)
             : (restingHeartrate == null
-                ? const Value.absent()
-                : Value(restingHeartrate)),
+                  ? const Value.absent()
+                  : Value(restingHeartrate)),
         maxHeartrate: clearMax
             ? const Value<int?>(null)
             : (maxHeartrate == null
-                ? const Value.absent()
-                : Value(maxHeartrate)),
+                  ? const Value.absent()
+                  : Value(maxHeartrate)),
       ),
     );
   }
 
   Stream<List<Activity>> watchActivities() {
-    return (select(activities)
-          ..orderBy([(a) => OrderingTerm.desc(a.startedAtMs)]))
-        .watch();
+    return (select(
+      activities,
+    )..orderBy([(a) => OrderingTerm.desc(a.startedAtMs)])).watch();
   }
 
   Stream<Activity> watchActivity(int activityId) {
-    return (select(activities)..where((a) => a.id.equals(activityId)))
-        .watchSingle();
+    return (select(
+      activities,
+    )..where((a) => a.id.equals(activityId))).watchSingle();
   }
 
   Stream<List<SampleRow>> watchSamples(int activityId) {
@@ -107,9 +108,15 @@ class AppDatabase extends _$AppDatabase {
   }) {
     return (update(activities)..where((a) => a.id.equals(activityId))).write(
       ActivitiesCompanion(
-        name: name == null ? const Value.absent() : Value(name.isEmpty ? null : name),
-        note: note == null ? const Value.absent() : Value(note.isEmpty ? null : note),
-        sportType: sportType == null ? const Value.absent() : Value(sportType.isEmpty ? null : sportType),
+        name: name == null
+            ? const Value.absent()
+            : Value(name.isEmpty ? null : name),
+        note: note == null
+            ? const Value.absent()
+            : Value(note.isEmpty ? null : note),
+        sportType: sportType == null
+            ? const Value.absent()
+            : Value(sportType.isEmpty ? null : sportType),
         updatedAtMs: Value(DateTime.now().millisecondsSinceEpoch),
       ),
     );
@@ -137,17 +144,15 @@ class AppDatabase extends _$AppDatabase {
     int? hr,
   }) {
     return into(samples).insert(
-      SamplesCompanion.insert(
-        activityId: activityId,
-        tMs: tMs,
-        hr: Value(hr),
-      ),
+      SamplesCompanion.insert(activityId: activityId, tMs: tMs, hr: Value(hr)),
     );
   }
 
   Stream<Marker?> watchWorkoutMarker(int activityId) {
     return (select(markers)
-          ..where((m) => m.activityId.equals(activityId) & m.kind.equals('workout'))
+          ..where(
+            (m) => m.activityId.equals(activityId) & m.kind.equals('workout'),
+          )
           ..limit(1))
         .watchSingleOrNull();
   }
@@ -159,9 +164,9 @@ class AppDatabase extends _$AppDatabase {
     required int durationMs,
   }) {
     return transaction(() async {
-      await (delete(markers)
-            ..where((m) =>
-                m.activityId.equals(activityId) & m.kind.equals('workout')))
+      await (delete(markers)..where(
+            (m) => m.activityId.equals(activityId) & m.kind.equals('workout'),
+          ))
           .go();
       await into(markers).insert(
         MarkersCompanion.insert(
@@ -179,15 +184,12 @@ class AppDatabase extends _$AppDatabase {
     required String name,
   }) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final existing = await (select(devices)
-          ..where((d) => d.platformId.equals(platformId)))
-        .getSingleOrNull();
+    final existing = await (select(
+      devices,
+    )..where((d) => d.platformId.equals(platformId))).getSingleOrNull();
     if (existing != null) {
       await (update(devices)..where((d) => d.id.equals(existing.id))).write(
-        DevicesCompanion(
-          name: Value(name),
-          lastConnectedAtMs: Value(nowMs),
-        ),
+        DevicesCompanion(name: Value(name), lastConnectedAtMs: Value(nowMs)),
       );
       return existing.copyWith(name: name, lastConnectedAtMs: nowMs);
     }

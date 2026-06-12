@@ -28,20 +28,26 @@ final activitiesProvider = StreamProvider<List<Activity>>((ref) {
   return db.watchActivities();
 });
 
-final activityProvider =
-    StreamProvider.family<Activity, int>((ref, activityId) {
+final activityProvider = StreamProvider.family<Activity, int>((
+  ref,
+  activityId,
+) {
   final db = ref.watch(databaseProvider);
   return db.watchActivity(activityId);
 });
 
-final samplesProvider =
-    StreamProvider.family<List<SampleRow>, int>((ref, activityId) {
+final samplesProvider = StreamProvider.family<List<SampleRow>, int>((
+  ref,
+  activityId,
+) {
   final db = ref.watch(databaseProvider);
   return db.watchSamples(activityId);
 });
 
-final workoutMarkerProvider =
-    StreamProvider.family<Marker?, int>((ref, activityId) {
+final workoutMarkerProvider = StreamProvider.family<Marker?, int>((
+  ref,
+  activityId,
+) {
   final db = ref.watch(databaseProvider);
   return db.watchWorkoutMarker(activityId);
 });

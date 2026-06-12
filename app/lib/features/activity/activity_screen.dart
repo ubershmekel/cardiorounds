@@ -45,7 +45,9 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
       if (!_noteFocus.hasFocus) _save(note: _noteController.text);
     });
     _sportTypeFocus.addListener(() {
-      if (!_sportTypeFocus.hasFocus) _save(sportType: _sportTypeController.text);
+      if (!_sportTypeFocus.hasFocus) {
+        _save(sportType: _sportTypeController.text);
+      }
     });
   }
 
@@ -61,12 +63,14 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   }
 
   void _save({String? name, String? note, String? sportType}) {
-    ref.read(databaseProvider).updateActivity(
-      activityId: widget.activityId,
-      name: name,
-      note: note,
-      sportType: sportType,
-    );
+    ref
+        .read(databaseProvider)
+        .updateActivity(
+          activityId: widget.activityId,
+          name: name,
+          note: note,
+          sportType: sportType,
+        );
   }
 
   @override
@@ -436,10 +440,14 @@ class _ActivityBody extends StatelessWidget {
               const SizedBox(height: 32),
               TextButton.icon(
                 onPressed: onDelete,
-                icon: Icon(Icons.delete_outline,
-                    color: theme.colorScheme.error),
-                label: Text('Delete activity',
-                    style: TextStyle(color: theme.colorScheme.error)),
+                icon: Icon(
+                  Icons.delete_outline,
+                  color: theme.colorScheme.error,
+                ),
+                label: Text(
+                  'Delete activity',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
               ),
             ],
           ),

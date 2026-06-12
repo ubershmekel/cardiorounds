@@ -14,9 +14,7 @@ class BluetoothHrScanner {
 
   Stream<List<ScanResult>> get results => _results.stream;
 
-  Future<void> start({
-    Duration timeout = const Duration(seconds: 30),
-  }) async {
+  Future<void> start({Duration timeout = const Duration(seconds: 30)}) async {
     appLog('BTScan', 'Starting scan (timeout: ${timeout.inSeconds}s)');
     _seen.clear();
     _sub?.cancel();
@@ -25,7 +23,10 @@ class BluetoothHrScanner {
       for (final r in batch) {
         if (_seen.add(r.device.remoteId)) {
           changed = true;
-          appLog('BTScan', 'Found device: ${r.device.platformName.isNotEmpty ? r.device.platformName : r.device.remoteId.str} RSSI=${r.rssi}');
+          appLog(
+            'BTScan',
+            'Found device: ${r.device.platformName.isNotEmpty ? r.device.platformName : r.device.remoteId.str} RSSI=${r.rssi}',
+          );
         }
       }
       if (changed) {
@@ -43,8 +44,7 @@ class BluetoothHrScanner {
     for (final r in FlutterBluePlus.lastScanResults) {
       byId[r.device.remoteId] = r;
     }
-    final list = byId.values.toList()
-      ..sort((a, b) => b.rssi.compareTo(a.rssi));
+    final list = byId.values.toList()..sort((a, b) => b.rssi.compareTo(a.rssi));
     return list;
   }
 

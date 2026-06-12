@@ -35,13 +35,15 @@ class _Stat extends StatelessWidget {
       children: [
         Text(
           value?.toString() ?? '--',
-          style: theme.textTheme.headlineSmall
-              ?.copyWith(fontWeight: FontWeight.w600),
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
         Text(
           label,
-          style: theme.textTheme.labelMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
