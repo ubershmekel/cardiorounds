@@ -228,7 +228,7 @@ class _ActivityBody extends StatelessWidget {
         '${d.day.toString().padLeft(2, '0')} $hh:$min';
   }
 
-  /// Average HR for each time-third of the workout window.
+  /// Max HR for each time-third of the workout window.
   List<int?> _computeThirds(int? startMs, int? endMs) {
     final filtered = rows.where((r) {
       if (startMs != null && r.tMs < startMs) return false;
@@ -245,7 +245,7 @@ class _ActivityBody extends StatelessWidget {
       final hi = t0 + (span * (i + 1)).round();
       return HrStats.fromHeartRates(
         filtered.where((r) => r.tMs >= lo && r.tMs < hi).map((r) => r.hr),
-      ).avg;
+      ).max;
     });
   }
 
@@ -423,9 +423,21 @@ class _ActivityBody extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _TrendStat(label: '1st third', value: thirds[0]),
-                  _TrendStat(label: '2nd third', value: thirds[1]),
-                  _TrendStat(label: '3rd third', value: thirds[2]),
+                  _TrendStat(
+                    label: '1st third',
+                    value: thirds[0],
+                    tooltip: 'Max HR in the first third of the workout',
+                  ),
+                  _TrendStat(
+                    label: '2nd third',
+                    value: thirds[1],
+                    tooltip: 'Max HR in the second third of the workout',
+                  ),
+                  _TrendStat(
+                    label: '3rd third',
+                    value: thirds[2],
+                    tooltip: 'Max HR in the final third of the workout',
+                  ),
                 ],
               ),
               if (extraBeats != null) ...[
@@ -434,6 +446,8 @@ class _ActivityBody extends StatelessWidget {
                   child: _TrendStat(
                     label: 'extra beats',
                     valueText: _formatBeats(extraBeats),
+                    tooltip:
+                        'Total beats above resting HR during the workout ((bpm - rest_bpm) × minutes)',
                   ),
                 ),
               ],
@@ -458,16 +472,22 @@ class _ActivityBody extends StatelessWidget {
 }
 
 class _TrendStat extends StatelessWidget {
-  const _TrendStat({required this.label, this.value, this.valueText});
+  const _TrendStat({
+    required this.label,
+    this.value,
+    this.valueText,
+    this.tooltip,
+  });
 
   final String label;
   final int? value;
   final String? valueText;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
+    final child = Column(
       children: [
         Text(
           valueText ?? value?.toString() ?? '--',
@@ -482,6 +502,12 @@ class _TrendStat extends StatelessWidget {
           ),
         ),
       ],
+    );
+    if (tooltip == null) return child;
+    return Tooltip(
+      message: tooltip!,
+      triggerMode: TooltipTriggerMode.tap,
+      child: child,
     );
   }
 }

@@ -14,24 +14,37 @@ class HrStatsRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _Stat(label: 'min', value: stats.min),
-        _Stat(label: 'avg', value: stats.avg),
-        _Stat(label: 'max', value: stats.max),
+        _Stat(
+          label: 'min',
+          value: stats.min,
+          tooltip: 'Minimum heart rate during the workout',
+        ),
+        _Stat(
+          label: 'avg',
+          value: stats.avg,
+          tooltip: 'Average heart rate during the workout',
+        ),
+        _Stat(
+          label: 'max',
+          value: stats.max,
+          tooltip: 'Maximum heart rate during the workout',
+        ),
       ],
     );
   }
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value});
+  const _Stat({required this.label, required this.value, this.tooltip});
 
   final String label;
   final int? value;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
+    final child = Column(
       children: [
         Text(
           value?.toString() ?? '--',
@@ -46,6 +59,12 @@ class _Stat extends StatelessWidget {
           ),
         ),
       ],
+    );
+    if (tooltip == null) return child;
+    return Tooltip(
+      message: tooltip!,
+      triggerMode: TooltipTriggerMode.tap,
+      child: child,
     );
   }
 }
