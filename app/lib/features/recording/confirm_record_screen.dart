@@ -233,14 +233,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
           RawAutocomplete<String>(
             textEditingController: _sportTypeController,
             focusNode: _sportTypeFocus,
-            optionsBuilder: (textEditingValue) {
-              final query = textEditingValue.text.trim().toLowerCase();
-              // An empty query shows the full history so past sport types are
-              // discoverable by clearing the field.
-              return _pastSportTypes.where(
-                (sport) => sport.toLowerCase().contains(query),
-              );
-            },
+            optionsBuilder: (_) => _pastSportTypes.take(5),
             optionsViewBuilder: (context, onSelected, options) {
               return Align(
                 alignment: Alignment.topLeft,
@@ -268,7 +261,6 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
                   return TextField(
                     controller: controller,
                     focusNode: focusNode,
-                    onSubmitted: (_) => onFieldSubmitted(),
                     decoration: const InputDecoration(
                       labelText: 'Sport type (optional)',
                       hintText: 'e.g. BJJ, Treadmill, Bike',

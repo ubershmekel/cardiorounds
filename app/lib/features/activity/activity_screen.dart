@@ -32,10 +32,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   final _nameFocus = FocusNode();
   final _noteFocus = FocusNode();
   final _sportTypeFocus = FocusNode();
+  List<String> _pastSportTypes = const [];
 
   @override
   void initState() {
     super.initState();
+    _loadPastSportTypes();
     // FocusNodes let us (1) save to DB when the user taps away (hasFocus → false)
     // and (2) jump focus from name to note on Enter (see onNameSubmitted).
     _nameFocus.addListener(() {
@@ -60,6 +62,11 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     _noteFocus.dispose();
     _sportTypeFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPastSportTypes() async {
+    final types = await ref.read(databaseProvider).distinctSportTypes();
+    if (mounted) setState(() => _pastSportTypes = types);
   }
 
   void _save({String? name, String? note, String? sportType}) {
@@ -129,6 +136,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             noteFocusNode: _noteFocus,
             sportTypeController: _sportTypeController,
             sportTypeFocusNode: _sportTypeFocus,
+            pastSportTypes: _pastSportTypes,
             onNameSubmitted: (_) => _noteFocus.requestFocus(),
             onOpenSettings: () => context.go('/settings'),
             onWorkoutChanged: (start, end) {
@@ -186,6 +194,7 @@ class _ActivityBody extends StatelessWidget {
     required this.noteFocusNode,
     required this.sportTypeController,
     required this.sportTypeFocusNode,
+    required this.pastSportTypes,
     required this.onNameSubmitted,
     required this.onOpenSettings,
     required this.onWorkoutChanged,
@@ -204,6 +213,7 @@ class _ActivityBody extends StatelessWidget {
   final FocusNode noteFocusNode;
   final TextEditingController sportTypeController;
   final FocusNode sportTypeFocusNode;
+  final List<String> pastSportTypes;
   final ValueChanged<String> onNameSubmitted;
   final VoidCallback onOpenSettings;
   final void Function(int startMs, int endMs) onWorkoutChanged;
@@ -354,18 +364,48 @@ class _ActivityBody extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-              TextField(
-                controller: sportTypeController,
+              RawAutocomplete<String>(
+                textEditingController: sportTypeController,
                 focusNode: sportTypeFocusNode,
-                textInputAction: TextInputAction.done,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Sport type…',
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                ),
+                optionsBuilder: (_) => pastSportTypes.take(5),
+                optionsViewBuilder: (context, onSelected, options) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: ListView(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          children: [
+                            for (final sport in options)
+                              ListTile(
+                                title: Text(sport),
+                                onTap: () => onSelected(sport),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                fieldViewBuilder:
+                    (context, controller, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        textInputAction: TextInputAction.done,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Sport type…',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      );
+                    },
               ),
               const SizedBox(height: 4),
               Text(
