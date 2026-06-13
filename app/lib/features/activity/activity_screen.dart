@@ -139,14 +139,14 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             pastSportTypes: _pastSportTypes,
             onNameSubmitted: (_) => _noteFocus.requestFocus(),
             onOpenSettings: () => context.go('/settings'),
-            onWorkoutChanged: (start, end) {
-              ref
-                  .read(databaseProvider)
-                  .upsertWorkoutMarker(
-                    activityId: widget.activityId,
-                    tMs: start,
-                    durationMs: end - start,
-                  );
+            onWorkoutChanged: (start, end) async {
+              final db = ref.read(databaseProvider);
+              await db.upsertWorkoutMarker(
+                activityId: widget.activityId,
+                tMs: start,
+                durationMs: end - start,
+              );
+              await db.computeAndSaveShape(widget.activityId);
             },
             onDelete: () async {
               final confirmed = await showDialog<bool>(

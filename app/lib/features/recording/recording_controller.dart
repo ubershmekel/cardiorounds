@@ -208,6 +208,7 @@ class RecordingController extends StateNotifier<RecordingState> {
       activityId: state.activityId,
       durationMs: elapsedMs,
     );
+    await db.computeAndSaveShape(state.activityId);
     await _sub.cancel();
     await _statusSub.cancel();
     _ticker.cancel();

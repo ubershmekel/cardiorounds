@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
+import '../../core/zones/zones.dart';
 import '../activity/activity_duration.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -159,6 +160,11 @@ class _ActivityRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final marker = ref.watch(workoutMarkerProvider(activity.id)).valueOrNull;
+    final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
+    final zoneSetup = zoneSetupFor(
+      maxHr: athlete?.maxHeartrate,
+      restingHr: athlete?.restingHeartrate,
+    );
     final durationMs = effectiveActivityDurationMs(
       activityDurationMs: activity.durationMs,
       workoutStartMs: marker?.tMs,
@@ -166,10 +172,34 @@ class _ActivityRow extends ConsumerWidget {
     );
     final subtitle =
         '${_formatDate(activity.startedAtMs)} · ${_formatDuration(durationMs)}';
+    final shapeBlocks =
+        zoneSetup != null ? _buildShapeBlocks(zoneSetup) : null;
     return ListTile(
       title: Text(activity.name ?? activity.sportType ?? 'Workout'),
       subtitle: Text(subtitle),
+      trailing: shapeBlocks,
       onTap: () => context.go('/activity/${activity.id}'),
+    );
+  }
+
+  Widget? _buildShapeBlocks(ZoneSetup zoneSetup) {
+    final vals = [activity.shapeStart, activity.shapeMid, activity.shapeEnd];
+    if (vals.every((v) => v == null)) return null;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 3,
+      children: vals.map((bpm) {
+        final zone = bpm != null ? zoneSetup.zoneFor(bpm) : null;
+        return Container(
+          width: 10,
+          height: 28,
+          decoration: BoxDecoration(
+            color: zone?.color.withValues(alpha: 0.85) ??
+                const Color(0xFF9090A8).withValues(alpha: 0.25),
+            borderRadius: BorderRadius.circular(3),
+          ),
+        );
+      }).toList(),
     );
   }
 }

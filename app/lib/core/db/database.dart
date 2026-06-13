@@ -138,6 +138,66 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// Computes max HR for each time-third of the trimmed workout window and
+  /// writes them to shapeStart / shapeMid / shapeEnd. Call after finalizing or
+  /// after the trim marker changes.
+  Future<void> computeAndSaveShape(int activityId) async {
+    final sampleRows = await (select(samples)
+          ..where((s) => s.activityId.equals(activityId))
+          ..orderBy([(s) => OrderingTerm.asc(s.tMs)]))
+        .get();
+
+    final marker = await (select(markers)
+          ..where(
+            (m) =>
+                m.activityId.equals(activityId) & m.kind.equals('workout'),
+          )
+          ..limit(1))
+        .getSingleOrNull();
+
+    final startMs = marker?.tMs;
+    final endMs =
+        marker == null ? null : marker.tMs + (marker.durationMs ?? 0);
+
+    final filtered = sampleRows.where((r) {
+      if (startMs != null && r.tMs < startMs) return false;
+      if (endMs != null && r.tMs > endMs) return false;
+      return true;
+    }).toList();
+
+    int? s0, s1, s2;
+    if (filtered.length >= 3) {
+      final t0 = filtered.first.tMs;
+      final t1 = filtered.last.tMs;
+      if (t0 != t1) {
+        final span = (t1 - t0) / 3;
+        int? maxInRange(int lo, int hi) {
+          int? max;
+          for (final r in filtered) {
+            if (r.tMs < lo || r.tMs >= hi) continue;
+            final hr = r.hr;
+            if (hr == null || hr <= 0) continue;
+            if (max == null || hr > max) max = hr;
+          }
+          return max;
+        }
+
+        s0 = maxInRange(t0, t0 + span.round());
+        s1 = maxInRange(t0 + span.round(), t0 + (span * 2).round());
+        s2 = maxInRange(t0 + (span * 2).round(), t1 + 1);
+      }
+    }
+
+    await (update(activities)..where((a) => a.id.equals(activityId))).write(
+      ActivitiesCompanion(
+        shapeStart: Value(s0),
+        shapeMid: Value(s1),
+        shapeEnd: Value(s2),
+        updatedAtMs: Value(DateTime.now().millisecondsSinceEpoch),
+      ),
+    );
+  }
+
   Future<void> insertSample({
     required int activityId,
     required int tMs,
