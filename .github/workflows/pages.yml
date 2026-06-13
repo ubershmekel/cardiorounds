@@ -1,0 +1,69 @@
+name: Publish GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Generate code
+        working-directory: app
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build web app
+        working-directory: app
+        run: flutter build web --release --base-href /cardiorounds/try/
+
+      - name: Assemble Pages site
+        run: |
+          rm -rf app/build/pages
+          mkdir -p app/build/pages/try app/build/pages/icons
+          cp -R app/build/web/. app/build/pages/try/
+          cp -R site/. app/build/pages/
+          cp -R app/web/icons/. app/build/pages/icons/
+          cp app/web/favicon.png app/build/pages/favicon.png
+          touch app/build/pages/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/build/pages
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
