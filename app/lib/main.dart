@@ -18,7 +18,7 @@ Future<void> _configureBluetoothBackgroundRestore() async {
     // the app for restored BLE events; Dart still only gets a short background
     // window, so the reconnect logs show whether recovery actually ran.
     appLog('BT', '_configureBluetoothBackgroundRestore');
-    await FlutterBluePlus.setOptions(restoreState: true);
+    await FlutterBluePlus.setOptions(showPowerAlert: true, restoreState: true);
     appLog('BT', 'FlutterBluePlus restoreState enabled');
   } catch (e) {
     appLog('BT', 'FlutterBluePlus restoreState setup failed: $e');
