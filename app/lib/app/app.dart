@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,6 +16,19 @@ class CardioRoundsApp extends ConsumerStatefulWidget {
 class _CardioRoundsAppState extends ConsumerState<CardioRoundsApp> {
   late final _router = buildRouter();
 
+  Widget _maybePortraitFrame(Widget? child) {
+    final inner = child ?? const SizedBox.shrink();
+    if (kIsWeb && Uri.base.path.contains('/try')) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: inner,
+        ),
+      );
+    }
+    return inner;
+  }
+
   @override
   Widget build(BuildContext context) {
     final startup = ref.watch(startupProvider);
@@ -28,7 +42,7 @@ class _CardioRoundsAppState extends ConsumerState<CardioRoundsApp> {
         return startup.when(
           loading: () => const _SplashScaffold(),
           error: (e, _) => _ErrorScaffold(error: e),
-          data: (_) => child ?? const SizedBox.shrink(),
+          data: (_) => _maybePortraitFrame(child),
         );
       },
     );

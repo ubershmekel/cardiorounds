@@ -34,28 +34,6 @@
 
     <title>Cardio Rounds</title>
     <link rel="manifest" href="manifest.json" />
-    <style>
-      html,
-      body {
-        min-height: 100%;
-        margin: 0;
-        background: #0a0a0a;
-      }
-
-      @media (min-width: 620px) {
-        body.pages-portrait-frame > flutter-view,
-        body.pages-portrait-frame > flt-glass-pane {
-          width: 620px !important;
-          max-width: 620px !important;
-          left: 50% !important;
-          right: auto !important;
-          transform: translateX(-50%) !important;
-          box-shadow:
-            0 0 0 1px rgba(255, 255, 255, 0.12),
-            0 24px 72px rgba(0, 0, 0, 0.55);
-        }
-      }
-    </style>
   </head>
   <body>
     <!--
@@ -66,11 +44,6 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-    <script>
-      if (/(^|\/)try(\/|$)/.test(window.location.pathname)) {
-        document.body.classList.add("pages-portrait-frame");
-      }
-    </script>
     <script src="flutter_bootstrap.js" async></script>
   </body>
 </html>
