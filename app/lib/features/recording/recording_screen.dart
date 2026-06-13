@@ -174,6 +174,8 @@ class RecordingScreen extends ConsumerWidget {
                             initialSpanMs: _liveWindowMs,
                             lineColor: scheme.primary,
                             zoneSetup: zoneSetup,
+                            activityStartMs:
+                                state.startedAt.millisecondsSinceEpoch,
                           ),
                         ),
                         const SizedBox(height: 16),

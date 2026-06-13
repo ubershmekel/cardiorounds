@@ -425,6 +425,7 @@ class _ActivityBody extends StatelessWidget {
                         windowEndMs: activity.durationMs,
                         workoutStartMs: workoutStart ?? 0,
                         workoutEndMs: workoutEnd ?? activity.durationMs,
+                        activityStartMs: activity.startedAtMs,
                         onChanged: onWorkoutChanged,
                       )
                     : ZoomableHrChart(
@@ -437,6 +438,7 @@ class _ActivityBody extends StatelessWidget {
                         workoutStartMs: workoutStart,
                         workoutEndMs: workoutEnd,
                         zoneSetup: zoneSetup,
+                        activityStartMs: activity.startedAtMs,
                       ),
               ),
               if (editing)

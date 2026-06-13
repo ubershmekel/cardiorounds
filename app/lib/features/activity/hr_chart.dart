@@ -15,6 +15,21 @@ const double _bottomGutter = 18;
 const double _topPad = 8;
 const double _rightPad = 8;
 const double _handleHitSlop = 28;
+const double _xAxisLabelOffset = 16;
+
+String formatHrChartElapsed(int ms) {
+  final totalSec = (ms / 1000).round();
+  final m = totalSec ~/ 60;
+  final s = totalSec % 60;
+  return '$m:${s.toString().padLeft(2, '0')}';
+}
+
+String formatHrChartTimeOfDay(int activityStartMs, int tMs) {
+  final time = DateTime.fromMillisecondsSinceEpoch(activityStartMs + tMs);
+  final h = time.hour.toString().padLeft(2, '0');
+  final m = time.minute.toString().padLeft(2, '0');
+  return '$h:$m';
+}
 
 enum HrActiveHandle { start, end }
 
@@ -72,6 +87,7 @@ class HrChart extends StatelessWidget {
     this.showHandles = false,
     this.activeHandle,
     this.zoneSetup,
+    this.activityStartMs,
   });
 
   final List<HrChartPoint> points;
@@ -83,6 +99,7 @@ class HrChart extends StatelessWidget {
   final int? workoutEndMs;
   final bool showHandles;
   final HrActiveHandle? activeHandle;
+  final int? activityStartMs;
 
   /// When provided, each line segment is colored by the zone of its starting
   /// sample. When null, the whole line uses [lineColor] (or the theme primary).
@@ -127,6 +144,7 @@ class HrChart extends StatelessWidget {
       showHandles: showHandles,
       activeHandle: activeHandle,
       zoneSetup: zoneSetup,
+      activityStartMs: activityStartMs,
     );
   }
 }
@@ -155,6 +173,7 @@ class _SelectableHrChart extends StatefulWidget {
     this.showHandles = false,
     this.activeHandle,
     this.zoneSetup,
+    this.activityStartMs,
   });
 
   final List<HrChartPoint> points;
@@ -172,14 +191,15 @@ class _SelectableHrChart extends StatefulWidget {
   final bool showHandles;
   final HrActiveHandle? activeHandle;
   final ZoneSetup? zoneSetup;
+  final int? activityStartMs;
 
   @override
   State<_SelectableHrChart> createState() => _SelectableHrChartState();
 }
 
 class _SelectableHrChartState extends State<_SelectableHrChart> {
-  static const double _selectionLabelWidth = 74;
-  static const double _selectionLabelHeight = 28;
+  static const double _selectionLabelWidth = 82;
+  static const double _selectionLabelHeight = 40;
 
   HrChartSelection? _selection;
 
@@ -295,6 +315,7 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
                 backgroundColor: widget.labelBackgroundColor,
                 borderColor: widget.gridColor,
                 textStyle: widget.labelStyle,
+                activityStartMs: widget.activityStartMs,
                 onDismissed: () => setState(() => _selection = null),
               ),
           ],
@@ -311,6 +332,7 @@ class _SelectionLabel extends StatelessWidget {
     required this.backgroundColor,
     required this.borderColor,
     required this.textStyle,
+    required this.activityStartMs,
     required this.onDismissed,
   });
 
@@ -319,6 +341,7 @@ class _SelectionLabel extends StatelessWidget {
   final Color backgroundColor;
   final Color borderColor;
   final TextStyle textStyle;
+  final int? activityStartMs;
   final VoidCallback onDismissed;
 
   @override
@@ -345,13 +368,24 @@ class _SelectionLabel extends StatelessWidget {
             border: Border.all(color: borderColor),
             borderRadius: BorderRadius.circular(6),
           ),
-          child: Center(
-            child: Text(
-              '${selection.hr} bpm',
-              maxLines: 1,
-              overflow: TextOverflow.clip,
-              style: textStyle,
-            ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                activityStartMs == null
+                    ? formatHrChartElapsed(selection.tMs)
+                    : formatHrChartTimeOfDay(activityStartMs!, selection.tMs),
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                style: textStyle,
+              ),
+              Text(
+                '${selection.hr} bpm',
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                style: textStyle,
+              ),
+            ],
           ),
         ),
       ),
@@ -428,14 +462,14 @@ class HrChartPainter extends CustomPainter {
     // X labels at the window start and end (elapsed mm:ss from recording start).
     _paintLabel(
       canvas,
-      _elapsed(startMs),
-      Offset(g.plotLeft, g.plotBottom + 2),
+      formatHrChartElapsed(startMs),
+      Offset(g.plotLeft, g.plotBottom + _xAxisLabelOffset),
       alignRight: false,
     );
     _paintLabel(
       canvas,
-      _elapsed(endMs),
-      Offset(g.plotRight, g.plotBottom + 2),
+      formatHrChartElapsed(endMs),
+      Offset(g.plotRight, g.plotBottom + _xAxisLabelOffset),
       alignRight: true,
     );
 
@@ -541,13 +575,21 @@ class HrChartPainter extends CustomPainter {
     final handlePaint = Paint()
       ..color = handleColor
       ..strokeWidth = 2;
-    canvas.drawLine(Offset(xs, g.plotTop), Offset(xs, g.plotBottom), handlePaint);
+    canvas.drawLine(
+      Offset(xs, g.plotTop),
+      Offset(xs, g.plotBottom),
+      handlePaint,
+    );
     canvas.drawCircle(
       Offset(xs, g.plotTop + 6),
       activeHandle == HrActiveHandle.start ? 10.0 : 7.0,
       handlePaint,
     );
-    canvas.drawLine(Offset(xe, g.plotTop), Offset(xe, g.plotBottom), handlePaint);
+    canvas.drawLine(
+      Offset(xe, g.plotTop),
+      Offset(xe, g.plotBottom),
+      handlePaint,
+    );
     canvas.drawCircle(
       Offset(xe, g.plotTop + 6),
       activeHandle == HrActiveHandle.end ? 10.0 : 7.0,
@@ -568,13 +610,6 @@ class HrChartPainter extends CustomPainter {
     final dx = alignRight ? anchor.dx - tp.width : anchor.dx;
     final dy = anchor.dy - tp.height / 2;
     tp.paint(canvas, Offset(dx, dy));
-  }
-
-  String _elapsed(int ms) {
-    final totalSec = (ms / 1000).round();
-    final m = totalSec ~/ 60;
-    final s = totalSec % 60;
-    return '$m:${s.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -613,6 +648,7 @@ class ZoomableHrChart extends StatefulWidget {
     this.workoutEndMs,
     this.minSpanMs = 5000,
     this.zoneSetup,
+    this.activityStartMs,
   });
 
   final List<HrChartPoint> points;
@@ -626,6 +662,7 @@ class ZoomableHrChart extends StatefulWidget {
   final int? workoutEndMs;
   final int minSpanMs;
   final ZoneSetup? zoneSetup;
+  final int? activityStartMs;
 
   @override
   State<ZoomableHrChart> createState() => _ZoomableHrChartState();
@@ -760,6 +797,7 @@ class _ZoomableHrChartState extends State<ZoomableHrChart> {
                 workoutStartMs: widget.workoutStartMs,
                 workoutEndMs: widget.workoutEndMs,
                 zoneSetup: widget.zoneSetup,
+                activityStartMs: widget.activityStartMs,
               ),
             ),
             if (zoomed)
@@ -799,6 +837,7 @@ class TrailingZoomableHrChart extends StatefulWidget {
     this.lineColor,
     this.minSpanMs = 5000,
     this.zoneSetup,
+    this.activityStartMs,
   });
 
   final List<HrChartPoint> points;
@@ -809,6 +848,7 @@ class TrailingZoomableHrChart extends StatefulWidget {
   final Color? lineColor;
   final int minSpanMs;
   final ZoneSetup? zoneSetup;
+  final int? activityStartMs;
 
   @override
   State<TrailingZoomableHrChart> createState() =>
@@ -876,6 +916,7 @@ class _TrailingZoomableHrChartState extends State<TrailingZoomableHrChart> {
         windowEndMs: widget.fullEndMs,
         lineColor: widget.lineColor,
         zoneSetup: widget.zoneSetup,
+        activityStartMs: widget.activityStartMs,
       ),
     );
   }
@@ -896,6 +937,7 @@ class EditableHrChart extends StatefulWidget {
     required this.onChanged,
     this.lineColor,
     this.minSpanMs = 5000,
+    this.activityStartMs,
   });
 
   final List<HrChartPoint> points;
@@ -907,6 +949,7 @@ class EditableHrChart extends StatefulWidget {
   final void Function(int startMs, int endMs) onChanged;
   final Color? lineColor;
   final int minSpanMs;
+  final int? activityStartMs;
 
   @override
   State<EditableHrChart> createState() => _EditableHrChartState();
@@ -953,7 +996,9 @@ class _EditableHrChartState extends State<EditableHrChart> {
       final x = d.localFocalPoint.dx;
       final dStart = (x - g.xForT(_start)).abs();
       final dEnd = (x - g.xForT(_end)).abs();
-      final nearest = dStart <= dEnd ? HrActiveHandle.start : HrActiveHandle.end;
+      final nearest = dStart <= dEnd
+          ? HrActiveHandle.start
+          : HrActiveHandle.end;
       if ((nearest == HrActiveHandle.start ? dStart : dEnd) <= _handleHitSlop) {
         setState(() => _active = nearest);
         return;
@@ -987,7 +1032,10 @@ class _EditableHrChartState extends State<EditableHrChart> {
     if (fullSpan <= 0) return;
 
     final oldSpan = _g0WinEnd! - _g0WinStart!;
-    final newSpan = (oldSpan / d.scale).round().clamp(widget.minSpanMs, fullSpan);
+    final newSpan = (oldSpan / d.scale).round().clamp(
+      widget.minSpanMs,
+      fullSpan,
+    );
 
     final g = HrChartGeometry(
       size: size,
@@ -998,11 +1046,13 @@ class _EditableHrChartState extends State<EditableHrChart> {
     if (g.plotWidth <= 0) return;
 
     // Keep the time under the focal point pinned as scale changes.
-    final desiredStart = _g0FocalT! -
+    final desiredStart =
+        _g0FocalT! -
         (d.localFocalPoint.dx - g.plotLeft) * newSpan / g.plotWidth;
-    final clampedStart = desiredStart
-        .round()
-        .clamp(widget.windowStartMs, widget.windowEndMs - newSpan);
+    final clampedStart = desiredStart.round().clamp(
+      widget.windowStartMs,
+      widget.windowEndMs - newSpan,
+    );
 
     setState(() {
       _winStart = clampedStart;
@@ -1040,6 +1090,7 @@ class _EditableHrChartState extends State<EditableHrChart> {
             workoutEndMs: _end,
             showHandles: true,
             activeHandle: _active,
+            activityStartMs: widget.activityStartMs,
           ),
         );
       },
