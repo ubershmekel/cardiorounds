@@ -11,6 +11,16 @@
 		<array>
 			<string>bluetooth-central</string>
 		</array>
+		<!--
+		Live Activity follow-up for the Mac/iOS build:
+		- Keep bluetooth-central; it lets CoreBluetooth wake the app for BLE events,
+		  but it does not create lock-screen workout status by itself.
+		- Add an ActivityKit Live Activity extension and set the app/extension
+		  NSSupportsLiveActivities capability from Xcode.
+		- Publish recording state, elapsed time, current BPM, and
+		  lost/reconnecting/recovered status from the Flutter side through a
+		  MethodChannel or a small native bridge.
+		-->
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
