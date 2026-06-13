@@ -42,7 +42,7 @@ tasks:
     desc: Run all tests
     dir: app
     cmds:
-      - flutter test
+      - flutter test -r expanded
   format:
     desc: Format Dart code and Prettier-supported project files
     cmds:
