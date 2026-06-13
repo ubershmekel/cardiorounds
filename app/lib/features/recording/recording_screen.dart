@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/db/providers.dart';
+import '../../core/hr/hr_source.dart';
 import '../../core/zones/zone_times.dart';
 import '../../core/zones/zones.dart';
 import '../activity/hr_chart.dart';
@@ -25,6 +26,34 @@ class RecordingScreen extends ConsumerWidget {
     final mm = m.toString().padLeft(2, '0');
     final ss = s.toString().padLeft(2, '0');
     return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+  }
+
+  String _formatSignalAge(Duration d) {
+    if (d.inMinutes >= 1) {
+      return '${d.inMinutes}m ${d.inSeconds.remainder(60)}s';
+    }
+    return '${d.inSeconds}s';
+  }
+
+  String _signalTitle(RecordingState state) {
+    return switch (state.sourceStatus) {
+      HrSourceStatusKind.reconnecting => 'Reconnecting to strap',
+      HrSourceStatusKind.disconnected => 'Heart-rate signal lost',
+      HrSourceStatusKind.disposed => 'Heart-rate source closed',
+      HrSourceStatusKind.connected => 'Heart-rate signal connected',
+    };
+  }
+
+  String _signalSubtitle(RecordingState state) {
+    final attempt = state.reconnectAttempt;
+    final age = _formatSignalAge(state.sourceStatusAge);
+    if (state.sourceStatus == HrSourceStatusKind.reconnecting) {
+      return attempt == null
+          ? 'Signal missing for $age'
+          : 'Attempt $attempt; signal missing for $age';
+    }
+    final message = state.sourceStatusMessage;
+    return message == null ? 'Signal missing for $age' : '$message; $age ago';
   }
 
   Future<void> _onStop(BuildContext context, WidgetRef ref) async {
@@ -126,6 +155,14 @@ class RecordingScreen extends ConsumerWidget {
                             style: Theme.of(context).textTheme.headlineSmall,
                           ),
                         ),
+                        if (state.sourceStatus != HrSourceStatusKind.connected)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 16),
+                            child: _SignalStatusBanner(
+                              title: _signalTitle(state),
+                              subtitle: _signalSubtitle(state),
+                            ),
+                          ),
                         const SizedBox(height: 16),
                         SizedBox(
                           height: chartHeight,
@@ -166,6 +203,55 @@ class RecordingScreen extends ConsumerWidget {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _SignalStatusBanner extends StatelessWidget {
+  const _SignalStatusBanner({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: scheme.error.withValues(alpha: 0.35)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(Icons.bluetooth_searching, color: scheme.onErrorContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: scheme.onErrorContainer,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onErrorContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -21,6 +21,7 @@ class FakeHeartRateSource implements HeartRateSource {
   final Random _random;
 
   final _controller = StreamController<HrSample>.broadcast();
+  final _statusController = StreamController<HrSourceStatus>.broadcast();
   late final Timer _timer;
   final DateTime _start = DateTime.now();
 
@@ -32,6 +33,9 @@ class FakeHeartRateSource implements HeartRateSource {
 
   @override
   Stream<HrSample> get samples => _controller.stream;
+
+  @override
+  Stream<HrSourceStatus> get status => _statusController.stream;
 
   void _tick(Timer _) {
     final now = DateTime.now();
@@ -45,6 +49,10 @@ class FakeHeartRateSource implements HeartRateSource {
   @override
   Future<void> dispose() async {
     _timer.cancel();
+    _statusController.add(
+      HrSourceStatus(kind: HrSourceStatusKind.disposed, at: DateTime.now()),
+    );
     await _controller.close();
+    await _statusController.close();
   }
 }
