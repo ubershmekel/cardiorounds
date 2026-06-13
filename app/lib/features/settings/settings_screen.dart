@@ -5,12 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_logger.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 
 const String kAppVersion = '0.1.0';
+final Uri _sourceCodeUrl = Uri.parse(
+  'https://github.com/ubershmekel/cardiorounds',
+);
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -198,6 +202,12 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
+            icon: const Icon(Icons.open_in_new),
+            label: const Text('Source on GitHub'),
+            onPressed: () => _openSourceCode(context),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
             icon: const Icon(Icons.download_outlined),
             label: const Text('Export database'),
             onPressed: () => _exportFile(
@@ -218,6 +228,16 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           ),
         ],
       ],
+    );
+  }
+
+  Future<void> _openSourceCode(BuildContext context) async {
+    if (await launchUrl(_sourceCodeUrl, mode: LaunchMode.externalApplication)) {
+      return;
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not open GitHub source')),
     );
   }
 
