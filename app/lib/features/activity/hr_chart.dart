@@ -16,6 +16,8 @@ const double _topPad = 8;
 const double _rightPad = 8;
 const double _handleHitSlop = 28;
 
+enum HrActiveHandle { start, end }
+
 /// Maps between heart-rate sample space (elapsed ms, BPM) and the chart's pixel
 /// space. Shared by the painter and the drag handling so they always agree.
 class HrChartGeometry {
@@ -68,6 +70,7 @@ class HrChart extends StatelessWidget {
     this.workoutStartMs,
     this.workoutEndMs,
     this.showHandles = false,
+    this.activeHandle,
     this.zoneSetup,
   });
 
@@ -79,6 +82,7 @@ class HrChart extends StatelessWidget {
   final int? workoutStartMs;
   final int? workoutEndMs;
   final bool showHandles;
+  final HrActiveHandle? activeHandle;
 
   /// When provided, each line segment is colored by the zone of its starting
   /// sample. When null, the whole line uses [lineColor] (or the theme primary).
@@ -121,6 +125,7 @@ class HrChart extends StatelessWidget {
       workoutStartMs: workoutStartMs,
       workoutEndMs: workoutEndMs,
       showHandles: showHandles,
+      activeHandle: activeHandle,
       zoneSetup: zoneSetup,
     );
   }
@@ -148,6 +153,7 @@ class _SelectableHrChart extends StatefulWidget {
     this.workoutStartMs,
     this.workoutEndMs,
     this.showHandles = false,
+    this.activeHandle,
     this.zoneSetup,
   });
 
@@ -164,6 +170,7 @@ class _SelectableHrChart extends StatefulWidget {
   final int? workoutStartMs;
   final int? workoutEndMs;
   final bool showHandles;
+  final HrActiveHandle? activeHandle;
   final ZoneSetup? zoneSetup;
 
   @override
@@ -274,6 +281,7 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
                     workoutStartMs: widget.workoutStartMs,
                     workoutEndMs: widget.workoutEndMs,
                     showHandles: widget.showHandles,
+                    activeHandle: widget.activeHandle,
                     zoneSetup: widget.zoneSetup,
                     selection: selection,
                   ),
@@ -365,6 +373,7 @@ class HrChartPainter extends CustomPainter {
     this.workoutStartMs,
     this.workoutEndMs,
     this.showHandles = false,
+    this.activeHandle,
     this.zoneSetup,
     this.selection,
   });
@@ -381,6 +390,7 @@ class HrChartPainter extends CustomPainter {
   final int? workoutStartMs;
   final int? workoutEndMs;
   final bool showHandles;
+  final HrActiveHandle? activeHandle;
   final ZoneSetup? zoneSetup;
   final HrChartSelection? selection;
 
@@ -531,14 +541,18 @@ class HrChartPainter extends CustomPainter {
     final handlePaint = Paint()
       ..color = handleColor
       ..strokeWidth = 2;
-    for (final x in [xs, xe]) {
-      canvas.drawLine(
-        Offset(x, g.plotTop),
-        Offset(x, g.plotBottom),
-        handlePaint,
-      );
-      canvas.drawCircle(Offset(x, g.plotTop + 6), 7, handlePaint);
-    }
+    canvas.drawLine(Offset(xs, g.plotTop), Offset(xs, g.plotBottom), handlePaint);
+    canvas.drawCircle(
+      Offset(xs, g.plotTop + 6),
+      activeHandle == HrActiveHandle.start ? 10.0 : 7.0,
+      handlePaint,
+    );
+    canvas.drawLine(Offset(xe, g.plotTop), Offset(xe, g.plotBottom), handlePaint);
+    canvas.drawCircle(
+      Offset(xe, g.plotTop + 6),
+      activeHandle == HrActiveHandle.end ? 10.0 : 7.0,
+      handlePaint,
+    );
   }
 
   void _paintLabel(
@@ -574,6 +588,7 @@ class HrChartPainter extends CustomPainter {
         old.workoutStartMs != workoutStartMs ||
         old.workoutEndMs != workoutEndMs ||
         old.showHandles != showHandles ||
+        old.activeHandle != activeHandle ||
         old.zoneSetup != zoneSetup ||
         old.selection?.tMs != selection?.tMs ||
         old.selection?.hr != selection?.hr;
@@ -897,17 +912,23 @@ class EditableHrChart extends StatefulWidget {
   State<EditableHrChart> createState() => _EditableHrChartState();
 }
 
-enum _ActiveHandle { start, end }
-
 class _EditableHrChartState extends State<EditableHrChart> {
   late int _start = widget.workoutStartMs;
   late int _end = widget.workoutEndMs;
-  _ActiveHandle? _active;
+  HrActiveHandle? _active;
+
+  // Zoom/pan window — subset of [widget.windowStartMs, widget.windowEndMs].
+  late int _winStart = widget.windowStartMs;
+  late int _winEnd = widget.windowEndMs;
+
+  // Snapshot at the start of a scale gesture for cumulative scale math.
+  int? _g0WinStart;
+  int? _g0WinEnd;
+  double? _g0FocalT;
 
   @override
   void didUpdateWidget(EditableHrChart old) {
     super.didUpdateWidget(old);
-    // Pick up persisted values when not mid-drag.
     if (_active == null) {
       _start = widget.workoutStartMs;
       _end = widget.workoutEndMs;
@@ -916,40 +937,87 @@ class _EditableHrChartState extends State<EditableHrChart> {
 
   HrChartGeometry _geometry(Size size) => HrChartGeometry(
     size: size,
-    startMs: widget.windowStartMs,
-    endMs: widget.windowEndMs,
+    startMs: _winStart,
+    endMs: _winEnd,
     axis: widget.axis,
   );
 
-  void _onPanStart(DragStartDetails d, Size size) {
-    final g = _geometry(size);
-    final x = d.localPosition.dx;
-    final dStart = (x - g.xForT(_start)).abs();
-    final dEnd = (x - g.xForT(_end)).abs();
-    final nearest = dStart <= dEnd ? _ActiveHandle.start : _ActiveHandle.end;
-    if ((nearest == _ActiveHandle.start ? dStart : dEnd) > _handleHitSlop) {
-      return;
+  void _onScaleStart(ScaleStartDetails d, Size size) {
+    _g0WinStart = null;
+    _g0WinEnd = null;
+    _g0FocalT = null;
+
+    if (d.pointerCount == 1) {
+      // Check if the finger landed on a handle.
+      final g = _geometry(size);
+      final x = d.localFocalPoint.dx;
+      final dStart = (x - g.xForT(_start)).abs();
+      final dEnd = (x - g.xForT(_end)).abs();
+      final nearest = dStart <= dEnd ? HrActiveHandle.start : HrActiveHandle.end;
+      if ((nearest == HrActiveHandle.start ? dStart : dEnd) <= _handleHitSlop) {
+        setState(() => _active = nearest);
+        return;
+      }
     }
-    setState(() => _active = nearest);
+
+    // No handle hit, or multi-finger — pan/zoom the view window.
+    _active = null;
+    final g = _geometry(size);
+    _g0WinStart = _winStart;
+    _g0WinEnd = _winEnd;
+    _g0FocalT = g.tForX(d.localFocalPoint.dx).toDouble();
   }
 
-  void _onPanUpdate(DragUpdateDetails d, Size size) {
-    if (_active == null) return;
-    final g = _geometry(size);
-    final t = g.tForX(d.localPosition.dx);
+  void _onScaleUpdate(ScaleUpdateDetails d, Size size) {
+    if (_active != null) {
+      final g = _geometry(size);
+      final t = g.tForX(d.localFocalPoint.dx);
+      setState(() {
+        if (_active == HrActiveHandle.start) {
+          _start = t.clamp(widget.windowStartMs, _end - widget.minSpanMs);
+        } else {
+          _end = t.clamp(_start + widget.minSpanMs, widget.windowEndMs);
+        }
+      });
+      return;
+    }
+
+    if (_g0WinStart == null || d.scale <= 0) return;
+    final fullSpan = widget.windowEndMs - widget.windowStartMs;
+    if (fullSpan <= 0) return;
+
+    final oldSpan = _g0WinEnd! - _g0WinStart!;
+    final newSpan = (oldSpan / d.scale).round().clamp(widget.minSpanMs, fullSpan);
+
+    final g = HrChartGeometry(
+      size: size,
+      startMs: _g0WinStart!,
+      endMs: _g0WinEnd!,
+      axis: widget.axis,
+    );
+    if (g.plotWidth <= 0) return;
+
+    // Keep the time under the focal point pinned as scale changes.
+    final desiredStart = _g0FocalT! -
+        (d.localFocalPoint.dx - g.plotLeft) * newSpan / g.plotWidth;
+    final clampedStart = desiredStart
+        .round()
+        .clamp(widget.windowStartMs, widget.windowEndMs - newSpan);
+
     setState(() {
-      if (_active == _ActiveHandle.start) {
-        _start = t.clamp(widget.windowStartMs, _end - widget.minSpanMs);
-      } else {
-        _end = t.clamp(_start + widget.minSpanMs, widget.windowEndMs);
-      }
+      _winStart = clampedStart;
+      _winEnd = clampedStart + newSpan;
     });
   }
 
-  void _onPanEnd() {
-    if (_active == null) return;
-    setState(() => _active = null);
-    widget.onChanged(_start, _end);
+  void _onScaleEnd(ScaleEndDetails _) {
+    if (_active != null) {
+      setState(() => _active = null);
+      widget.onChanged(_start, _end);
+    }
+    _g0WinStart = null;
+    _g0WinEnd = null;
+    _g0FocalT = null;
   }
 
   @override
@@ -958,19 +1026,20 @@ class _EditableHrChartState extends State<EditableHrChart> {
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         return GestureDetector(
-          onPanStart: (d) => _onPanStart(d, size),
-          onPanUpdate: (d) => _onPanUpdate(d, size),
-          onPanEnd: (_) => _onPanEnd(),
-          onPanCancel: _onPanEnd,
+          behavior: HitTestBehavior.opaque,
+          onScaleStart: (d) => _onScaleStart(d, size),
+          onScaleUpdate: (d) => _onScaleUpdate(d, size),
+          onScaleEnd: _onScaleEnd,
           child: HrChart(
             points: widget.points,
             axis: widget.axis,
-            windowStartMs: widget.windowStartMs,
-            windowEndMs: widget.windowEndMs,
+            windowStartMs: _winStart,
+            windowEndMs: _winEnd,
             lineColor: widget.lineColor,
             workoutStartMs: _start,
             workoutEndMs: _end,
             showHandles: true,
+            activeHandle: _active,
           ),
         );
       },
