@@ -575,26 +575,34 @@ class HrChartPainter extends CustomPainter {
     final handlePaint = Paint()
       ..color = handleColor
       ..strokeWidth = 2;
-    canvas.drawLine(
-      Offset(xs, g.plotTop),
-      Offset(xs, g.plotBottom),
-      handlePaint,
-    );
-    canvas.drawCircle(
-      Offset(xs, g.plotTop + 6),
-      activeHandle == HrActiveHandle.start ? 10.0 : 7.0,
-      handlePaint,
-    );
-    canvas.drawLine(
-      Offset(xe, g.plotTop),
-      Offset(xe, g.plotBottom),
-      handlePaint,
-    );
-    canvas.drawCircle(
-      Offset(xe, g.plotTop + 6),
-      activeHandle == HrActiveHandle.end ? 10.0 : 7.0,
-      handlePaint,
-    );
+    // Only draw a handle circle+line when the handle is within the visible
+    // window. When zoomed in, an off-screen handle shows no marker (the scrim
+    // edge already indicates the boundary); the Positioned hit area in
+    // _EditableHrChartState is also hidden in that case.
+    if (ws >= startMs && ws <= endMs) {
+      canvas.drawLine(
+        Offset(xs, g.plotTop),
+        Offset(xs, g.plotBottom),
+        handlePaint,
+      );
+      canvas.drawCircle(
+        Offset(xs, g.plotTop + 6),
+        activeHandle == HrActiveHandle.start ? 10.0 : 7.0,
+        handlePaint,
+      );
+    }
+    if (we >= startMs && we <= endMs) {
+      canvas.drawLine(
+        Offset(xe, g.plotTop),
+        Offset(xe, g.plotBottom),
+        handlePaint,
+      );
+      canvas.drawCircle(
+        Offset(xe, g.plotTop + 6),
+        activeHandle == HrActiveHandle.end ? 10.0 : 7.0,
+        handlePaint,
+      );
+    }
   }
 
   void _paintLabel(
@@ -960,14 +968,17 @@ class _EditableHrChartState extends State<EditableHrChart> {
   late int _end = widget.workoutEndMs;
   HrActiveHandle? _active;
 
-  // Zoom/pan window — subset of [widget.windowStartMs, widget.windowEndMs].
+  // Zoom window — subset of [widget.windowStartMs, widget.windowEndMs].
   late int _winStart = widget.windowStartMs;
   late int _winEnd = widget.windowEndMs;
 
-  // Snapshot at the start of a scale gesture for cumulative scale math.
+  // Pinch-zoom snapshot (set at the start of a 2-finger gesture).
   int? _g0WinStart;
   int? _g0WinEnd;
   double? _g0FocalT;
+
+  // Accumulated drag position (chart pixels) during a handle drag.
+  double? _handleDragX;
 
   @override
   void didUpdateWidget(EditableHrChart old) {
@@ -985,28 +996,44 @@ class _EditableHrChartState extends State<EditableHrChart> {
     axis: widget.axis,
   );
 
-  void _onScaleStart(ScaleStartDetails d, Size size) {
-    _g0WinStart = null;
-    _g0WinEnd = null;
-    _g0FocalT = null;
+  // --- Handle drag (via onHorizontalDrag* on Positioned hit areas) -----------
 
-    if (d.pointerCount == 1) {
-      // Check if the finger landed on a handle.
-      final g = _geometry(size);
-      final x = d.localFocalPoint.dx;
-      final dStart = (x - g.xForT(_start)).abs();
-      final dEnd = (x - g.xForT(_end)).abs();
-      final nearest = dStart <= dEnd
-          ? HrActiveHandle.start
-          : HrActiveHandle.end;
-      if ((nearest == HrActiveHandle.start ? dStart : dEnd) <= _handleHitSlop) {
-        setState(() => _active = nearest);
-        return;
+  void _onHandleDragStart(HrActiveHandle handle, Size size) {
+    final g = _geometry(size);
+    _handleDragX = g
+        .xForT(handle == HrActiveHandle.start ? _start : _end)
+        .toDouble();
+    setState(() => _active = handle);
+  }
+
+  void _onHandleDragUpdate(HrActiveHandle handle, double dx, Size size) {
+    final anchor = _handleDragX;
+    if (anchor == null) return;
+    _handleDragX = anchor + dx;
+    final g = _geometry(size);
+    final t = g.tForX(_handleDragX!);
+    setState(() {
+      if (handle == HrActiveHandle.start) {
+        _start = t.clamp(widget.windowStartMs, _end - widget.minSpanMs);
+      } else {
+        _end = t.clamp(_start + widget.minSpanMs, widget.windowEndMs);
       }
-    }
+    });
+  }
 
-    // No handle hit, or multi-finger — pan/zoom the view window.
-    _active = null;
+  void _onHandleDragEnd() {
+    _handleDragX = null;
+    if (_active == null) return;
+    setState(() => _active = null);
+    widget.onChanged(_start, _end);
+  }
+
+  // --- Pinch zoom (via onScale* on the base chart) --------------------------
+
+  // Only activated for 2+ pointer gestures so single-finger touches fall
+  // through to the parent scroll view.
+  void _onScaleStart(ScaleStartDetails d, Size size) {
+    if (d.pointerCount < 2) return;
     final g = _geometry(size);
     _g0WinStart = _winStart;
     _g0WinEnd = _winEnd;
@@ -1014,19 +1041,6 @@ class _EditableHrChartState extends State<EditableHrChart> {
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d, Size size) {
-    if (_active != null) {
-      final g = _geometry(size);
-      final t = g.tForX(d.localFocalPoint.dx);
-      setState(() {
-        if (_active == HrActiveHandle.start) {
-          _start = t.clamp(widget.windowStartMs, _end - widget.minSpanMs);
-        } else {
-          _end = t.clamp(_start + widget.minSpanMs, widget.windowEndMs);
-        }
-      });
-      return;
-    }
-
     if (_g0WinStart == null || d.scale <= 0) return;
     final fullSpan = widget.windowEndMs - widget.windowStartMs;
     if (fullSpan <= 0) return;
@@ -1061,10 +1075,6 @@ class _EditableHrChartState extends State<EditableHrChart> {
   }
 
   void _onScaleEnd(ScaleEndDetails _) {
-    if (_active != null) {
-      setState(() => _active = null);
-      widget.onChanged(_start, _end);
-    }
     _g0WinStart = null;
     _g0WinEnd = null;
     _g0FocalT = null;
@@ -1075,23 +1085,80 @@ class _EditableHrChartState extends State<EditableHrChart> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onScaleStart: (d) => _onScaleStart(d, size),
-          onScaleUpdate: (d) => _onScaleUpdate(d, size),
-          onScaleEnd: _onScaleEnd,
-          child: HrChart(
-            points: widget.points,
-            axis: widget.axis,
-            windowStartMs: _winStart,
-            windowEndMs: _winEnd,
-            lineColor: widget.lineColor,
-            workoutStartMs: _start,
-            workoutEndMs: _end,
-            showHandles: true,
-            activeHandle: _active,
-            activityStartMs: widget.activityStartMs,
-          ),
+        final g = _geometry(size);
+        final startX = g.xForT(_start);
+        final endX = g.xForT(_end);
+        final startVisible = _start >= _winStart && _start <= _winEnd;
+        final endVisible = _end >= _winStart && _end <= _winEnd;
+
+        return Stack(
+          children: [
+            // Chart + pinch-zoom gesture (single-finger falls through to scroll).
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onScaleStart: (d) => _onScaleStart(d, size),
+                onScaleUpdate: (d) => _onScaleUpdate(d, size),
+                onScaleEnd: _onScaleEnd,
+                child: HrChart(
+                  points: widget.points,
+                  axis: widget.axis,
+                  windowStartMs: _winStart,
+                  windowEndMs: _winEnd,
+                  lineColor: widget.lineColor,
+                  workoutStartMs: _start,
+                  workoutEndMs: _end,
+                  showHandles: true,
+                  activeHandle: _active,
+                  activityStartMs: widget.activityStartMs,
+                ),
+              ),
+            ),
+            // Dedicated horizontal-drag hit areas for each handle. Using
+            // onHorizontalDrag* lets these win the gesture arena for horizontal
+            // movements while vertical swipes still reach the parent scroll view.
+            if (startVisible)
+              Positioned(
+                left: (startX - _handleHitSlop).clamp(
+                  0.0,
+                  size.width - _handleHitSlop * 2,
+                ),
+                top: 0,
+                bottom: 0,
+                width: _handleHitSlop * 2,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragStart: (_) =>
+                      _onHandleDragStart(HrActiveHandle.start, size),
+                  onHorizontalDragUpdate: (d) => _onHandleDragUpdate(
+                    HrActiveHandle.start,
+                    d.delta.dx,
+                    size,
+                  ),
+                  onHorizontalDragEnd: (_) => _onHandleDragEnd(),
+                  onHorizontalDragCancel: _onHandleDragEnd,
+                ),
+              ),
+            if (endVisible)
+              Positioned(
+                left: (endX - _handleHitSlop).clamp(
+                  0.0,
+                  size.width - _handleHitSlop * 2,
+                ),
+                top: 0,
+                bottom: 0,
+                width: _handleHitSlop * 2,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragStart: (_) =>
+                      _onHandleDragStart(HrActiveHandle.end, size),
+                  onHorizontalDragUpdate: (d) =>
+                      _onHandleDragUpdate(HrActiveHandle.end, d.delta.dx, size),
+                  onHorizontalDragEnd: (_) => _onHandleDragEnd(),
+                  onHorizontalDragCancel: _onHandleDragEnd,
+                ),
+              ),
+          ],
         );
       },
     );
