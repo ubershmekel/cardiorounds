@@ -998,12 +998,19 @@ class _EditableHrChartState extends State<EditableHrChart> {
 
   // --- Handle drag (via onHorizontalDrag* on Positioned hit areas) -----------
 
-  void _onHandleDragStart(HrActiveHandle handle, Size size) {
-    final g = _geometry(size);
-    _handleDragX = g
-        .xForT(handle == HrActiveHandle.start ? _start : _end)
-        .toDouble();
+  void _onHandlePress(HrActiveHandle handle) {
+    // Fires on onTapDown — immediately before any arena resolution — so the
+    // circle inflates as soon as the finger touches the handle area.
     setState(() => _active = handle);
+  }
+
+  void _onHandleDragStart(HrActiveHandle handle, Size size) {
+    // onTapCancel fires in the same frame just before this, clearing _active.
+    // Re-set it here so the circle stays inflated through the drag.
+    setState(() => _active = handle);
+    final g = _geometry(size);
+    _handleDragX =
+        g.xForT(handle == HrActiveHandle.start ? _start : _end).toDouble();
   }
 
   void _onHandleDragUpdate(HrActiveHandle handle, double dx, Size size) {
@@ -1022,10 +1029,10 @@ class _EditableHrChartState extends State<EditableHrChart> {
   }
 
   void _onHandleDragEnd() {
+    final wasDragging = _handleDragX != null;
     _handleDragX = null;
-    if (_active == null) return;
     setState(() => _active = null);
-    widget.onChanged(_start, _end);
+    if (wasDragging) widget.onChanged(_start, _end);
   }
 
   // --- Pinch zoom (via onScale* on the base chart) --------------------------
@@ -1128,6 +1135,9 @@ class _EditableHrChartState extends State<EditableHrChart> {
                 width: _handleHitSlop * 2,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
+                  onTapDown: (_) => _onHandlePress(HrActiveHandle.start),
+                  onTapUp: (_) => _onHandleDragEnd(),
+                  onTapCancel: () => setState(() => _active = null),
                   onHorizontalDragStart: (_) =>
                       _onHandleDragStart(HrActiveHandle.start, size),
                   onHorizontalDragUpdate: (d) => _onHandleDragUpdate(
@@ -1150,6 +1160,9 @@ class _EditableHrChartState extends State<EditableHrChart> {
                 width: _handleHitSlop * 2,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
+                  onTapDown: (_) => _onHandlePress(HrActiveHandle.end),
+                  onTapUp: (_) => _onHandleDragEnd(),
+                  onTapCancel: () => setState(() => _active = null),
                   onHorizontalDragStart: (_) =>
                       _onHandleDragStart(HrActiveHandle.end, size),
                   onHorizontalDragUpdate: (d) =>
