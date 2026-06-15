@@ -7,6 +7,8 @@ import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 import '../../core/hr/fake_hr_source.dart';
 import '../../core/hr/hr_source.dart';
+import '../../core/zones/zones.dart';
+import 'live_activity.dart';
 
 const Duration kRecordingStatsInterval = Duration(minutes: 1);
 const Duration kRecordingStatsSuspensionGap = Duration(seconds: 75);
@@ -75,7 +77,9 @@ class RecordingController extends StateNotifier<RecordingState> {
     required this.db,
     required this.source,
     required int activityId,
+    ZoneSetup? zoneSetup,
   }) : _started = DateTime.now(),
+       _zoneSetup = zoneSetup,
        super(
          RecordingState(
            activityId: activityId,
@@ -91,6 +95,12 @@ class RecordingController extends StateNotifier<RecordingState> {
          ),
        ) {
     appLog('Recording', 'Started activity $activityId on ${source.deviceName}');
+    _liveActivity.start(
+      activityId: activityId,
+      deviceName: source.deviceName,
+      startedAt: state.startedAt,
+    );
+    _updateLiveActivity();
     _sub = source.samples.listen(_onSample);
     _statusSub = source.status.listen(_onSourceStatus);
 
@@ -98,6 +108,7 @@ class RecordingController extends StateNotifier<RecordingState> {
       // Drives elapsed time in the UI when no HR sample arrives that second.
       if (mounted && !state.stopped) {
         state = state.copyWith(now: DateTime.now());
+        _updateLiveActivity();
       }
     });
     _lastStatsTick = DateTime.now();
@@ -125,6 +136,8 @@ class RecordingController extends StateNotifier<RecordingState> {
   final AppDatabase db;
   final HeartRateSource source;
   final DateTime _started;
+  final ZoneSetup? _zoneSetup;
+  final RecordingLiveActivity _liveActivity = const RecordingLiveActivity();
   late final StreamSubscription<HrSample> _sub;
   late final StreamSubscription<HrSourceStatus> _statusSub;
   late final Timer _ticker;
@@ -160,6 +173,7 @@ class RecordingController extends StateNotifier<RecordingState> {
         clearSourceStatusMessage: recovered,
         clearReconnectAttempt: recovered,
       );
+      _updateLiveActivity();
     }
   }
 
@@ -193,7 +207,30 @@ class RecordingController extends StateNotifier<RecordingState> {
         reconnectAttempt: status.attempt,
         clearReconnectAttempt: status.attempt == null,
       );
+      _updateLiveActivity();
     }
+  }
+
+  void _updateLiveActivity() {
+    final status = switch (state.sourceStatus) {
+      HrSourceStatusKind.connected => 'Recording',
+      HrSourceStatusKind.reconnecting => 'Reconnecting',
+      HrSourceStatusKind.disconnected => 'Signal lost',
+      HrSourceStatusKind.disposed => 'Stopped',
+    };
+    final detail = state.reconnectAttempt == null
+        ? state.sourceStatusMessage
+        : 'Attempt ${state.reconnectAttempt}';
+    _liveActivity.update(
+      liveActivitySnapshotFor(
+        activityId: state.activityId,
+        elapsed: state.elapsed,
+        bpm: state.currentBpm,
+        status: status,
+        statusDetail: detail,
+        zone: _zoneSetup?.zoneFor(state.currentBpm),
+      ),
+    );
   }
 
   Future<void> stop() async {
@@ -209,6 +246,7 @@ class RecordingController extends StateNotifier<RecordingState> {
       durationMs: elapsedMs,
     );
     await db.computeAndSaveShape(state.activityId);
+    await _liveActivity.end(activityId: state.activityId);
     await _sub.cancel();
     await _statusSub.cancel();
     _ticker.cancel();
@@ -223,6 +261,7 @@ class RecordingController extends StateNotifier<RecordingState> {
     _sub.cancel();
     _statusSub.cancel();
     if (!state.stopped) {
+      _liveActivity.end(activityId: state.activityId);
       source.dispose();
     }
     super.dispose();
@@ -232,6 +271,7 @@ class RecordingController extends StateNotifier<RecordingState> {
 final recordingControllerProvider = StateNotifierProvider.autoDispose
     .family<RecordingController, RecordingState, int>((ref, activityId) {
       final db = ref.watch(databaseProvider);
+      final athlete = ref.read(defaultAthleteProvider).valueOrNull;
       // Picker writes here before navigating to the recording screen. Fall back to
       // a synthetic source if someone deep-links into /recording/:id directly.
       final source = ref.read(pendingHrSourceProvider) ?? FakeHeartRateSource();
@@ -249,5 +289,9 @@ final recordingControllerProvider = StateNotifierProvider.autoDispose
         db: db,
         source: source,
         activityId: activityId,
+        zoneSetup: zoneSetupFor(
+          maxHr: athlete?.maxHeartrate,
+          restingHr: athlete?.restingHeartrate,
+        ),
       );
     });

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,6 +42,8 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   bool _scanning = false;
   bool _connecting = false;
   String? _error;
+
+  bool get _showFakeStrap => kIsWeb || kDebugMode;
 
   @override
   void initState() {
@@ -278,16 +280,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
-          if (kIsWeb)
-            _PickerCard(
-              title: 'Synthetic strap (debug)',
-              subtitle:
-                  'Generates a fake heart-rate stream for UI testing on web.',
-              icon: Icons.bug_report_outlined,
-              onTap: _connecting ? null : _onSyntheticTap,
-            )
-          else
-            ..._buildMobilePicker(context),
+          ..._buildDevicePicker(context),
           if (_connecting)
             const Padding(
               padding: EdgeInsets.only(top: 16),
@@ -298,7 +291,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     );
   }
 
-  List<Widget> _buildMobilePicker(BuildContext context) {
+  List<Widget> _buildDevicePicker(BuildContext context) {
     return [
       Row(
         children: [
@@ -322,6 +315,15 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
         ],
       ),
       const SizedBox(height: 8),
+      if (_showFakeStrap) ...[
+        _PickerCard(
+          title: 'Simulated Bluetooth strap',
+          subtitle: 'Debug heart-rate stream for simulator and emulator runs.',
+          icon: Icons.bug_report_outlined,
+          onTap: _connecting ? null : _onSyntheticTap,
+        ),
+        const SizedBox(height: 8),
+      ],
       if (_results.isEmpty && !_scanning)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 24),

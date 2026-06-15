@@ -3,6 +3,11 @@
 version: "3"
 
 tasks:
+  flutter-run:
+    desc: Run the app in debug mode
+    dir: app
+    cmds:
+      - flutter run
   run-android:
     desc: Run the app in debug mode on Android
     dir: app
