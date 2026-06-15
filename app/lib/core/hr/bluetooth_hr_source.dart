@@ -22,12 +22,12 @@ int? parseHeartRateMeasurement(List<int> data) {
   if (data.isEmpty) return null;
   final flags = data[0];
   final uint16 = (flags & 0x01) != 0;
-  if (uint16) {
-    if (data.length < 3) return null;
-    return data[1] | (data[2] << 8);
-  }
-  if (data.length < 2) return null;
-  return data[1];
+  final bpm = uint16
+      ? (data.length < 3 ? null : data[1] | (data[2] << 8))
+      : (data.length < 2 ? null : data[1]);
+  // Treat 0 as null — some monitors emit 0 BPM during sensor contact loss
+  // instead of dropping the notification entirely.
+  return (bpm == null || bpm <= 0) ? null : bpm;
 }
 
 class BluetoothHeartRateSource implements HeartRateSource {

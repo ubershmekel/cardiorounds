@@ -8,6 +8,8 @@ class HrChartPoint {
 
   final int tMs;
   final int? hr;
+
+  bool get isValidHr => hr != null && hr! > 0;
 }
 
 const double _leftGutter = 36;
@@ -246,11 +248,11 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
         continue;
       }
 
-      final hr = point.hr;
-      if (hr == null) {
+      if (!point.isValidHr) {
         previous = null;
         continue;
       }
+      final hr = point.hr!;
 
       if (point.tMs == tMs) return hr;
 
@@ -473,9 +475,12 @@ class HrChartPainter extends CustomPainter {
       alignRight: true,
     );
 
+    canvas.save();
+    canvas.clipRect(Rect.fromLTRB(g.plotLeft, g.plotTop, g.plotRight, g.plotBottom));
     _paintLine(canvas, g);
     _paintWorkoutWindow(canvas, g);
     _paintSelection(canvas, g);
+    canvas.restore();
   }
 
   void _paintSelection(Canvas canvas, HrChartGeometry g) {
@@ -510,12 +515,11 @@ class HrChartPainter extends CustomPainter {
           penDown = false;
           continue;
         }
-        final hr = p.hr;
-        if (hr == null) {
+        if (!p.isValidHr) {
           penDown = false;
           continue;
         }
-        final offset = Offset(g.xForT(p.tMs), g.yForHr(hr));
+        final offset = Offset(g.xForT(p.tMs), g.yForHr(p.hr!));
         if (penDown) {
           path.lineTo(offset.dx, offset.dy);
         } else {
@@ -531,11 +535,11 @@ class HrChartPainter extends CustomPainter {
     // with the color of its starting sample's zone.
     HrChartPoint? prev;
     for (final p in points) {
-      if (p.tMs < startMs || p.tMs > endMs || p.hr == null) {
+      if (p.tMs < startMs || p.tMs > endMs || !p.isValidHr) {
         prev = null;
         continue;
       }
-      if (prev != null && prev.hr != null) {
+      if (prev != null && prev.isValidHr) {
         final zone = setup.zoneFor(prev.hr);
         basePaint.color = zone?.color ?? lineColor;
         canvas.drawLine(

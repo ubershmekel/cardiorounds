@@ -16,6 +16,11 @@ void main() {
       expect(parseHeartRateMeasurement([0x00]), isNull);
       expect(parseHeartRateMeasurement([0x01, 0x2c]), isNull);
     });
+
+    test('returns null for zero BPM (sensor glitch)', () {
+      expect(parseHeartRateMeasurement([0x00, 0x00]), isNull);
+      expect(parseHeartRateMeasurement([0x01, 0x00, 0x00]), isNull);
+    });
   });
 
   group('bluetoothReconnectDelayForAttempt', () {
