@@ -8,6 +8,15 @@ import '../features/recording/recording_screen.dart';
 import '../features/settings/settings_screen.dart';
 import 'shell.dart';
 
+// Route structure notes:
+// - StatefulShellRoute owns /home, /record, and /settings. Its IndexedStack
+//   keeps all three branch widget trees alive when switching tabs.
+// - The recording screen lives at /record/recording/:id (nested under /record)
+//   so go_router assigns it to the Record branch. This is what keeps the
+//   RecordingController alive while the user browses other tabs — if recording
+//   were a root-level route it would replace the shell entirely.
+// - /activity/:id is a root-level route so it overlays the full screen. It is
+//   pushed (not go'd) from the home list so the shell stays alive underneath.
 GoRouter buildRouter() {
   final rootKey = GlobalKey<NavigatorState>();
 
@@ -29,6 +38,17 @@ GoRouter buildRouter() {
               GoRoute(
                 path: '/record',
                 builder: (_, _) => const ConfirmRecordScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'recording/:activityId',
+                    builder: (_, state) {
+                      final activityId = int.parse(
+                        state.pathParameters['activityId']!,
+                      );
+                      return RecordingScreen(activityId: activityId);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -41,14 +61,6 @@ GoRouter buildRouter() {
             ],
           ),
         ],
-      ),
-      GoRoute(
-        path: '/recording/:activityId',
-        parentNavigatorKey: rootKey,
-        builder: (_, state) {
-          final activityId = int.parse(state.pathParameters['activityId']!);
-          return RecordingScreen(activityId: activityId);
-        },
       ),
       GoRoute(
         path: '/activity/:activityId',

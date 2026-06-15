@@ -7,6 +7,9 @@ import 'database.dart';
 /// RecordingController on the next route. Reset to null when recording stops.
 final pendingHrSourceProvider = StateProvider<HeartRateSource?>((_) => null);
 
+/// The activityId of the in-progress recording, or null when not recording.
+final activeRecordingIdProvider = StateProvider<int?>((_) => null);
+
 final databaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
   ref.onDispose(db.close);

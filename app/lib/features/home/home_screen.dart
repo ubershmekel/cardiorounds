@@ -159,6 +159,8 @@ class _ActivityRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final activeRecordingId = ref.watch(activeRecordingIdProvider);
+    final isRecording = activity.id == activeRecordingId;
     final marker = ref.watch(workoutMarkerProvider(activity.id)).valueOrNull;
     final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
     final zoneSetup = zoneSetupFor(
@@ -170,15 +172,20 @@ class _ActivityRow extends ConsumerWidget {
       workoutStartMs: marker?.tMs,
       workoutDurationMs: marker?.durationMs,
     );
-    final subtitle =
-        '${_formatDate(activity.startedAtMs)} · ${_formatDuration(durationMs)}';
-    final shapeBlocks =
-        zoneSetup != null ? _buildShapeBlocks(zoneSetup) : null;
+    final dateStr = _formatDate(activity.startedAtMs);
+    final subtitle = isRecording
+        ? dateStr
+        : '$dateStr · ${_formatDuration(durationMs)}';
+    final shapeBlocks = zoneSetup != null && !isRecording
+        ? _buildShapeBlocks(zoneSetup)
+        : null;
     return ListTile(
       title: Text(activity.name ?? activity.sportType ?? 'Workout'),
       subtitle: Text(subtitle),
-      trailing: shapeBlocks,
-      onTap: () => context.go('/activity/${activity.id}'),
+      trailing: isRecording ? const _RecordingChip() : shapeBlocks,
+      onTap: () => isRecording
+          ? context.go('/record/recording/${activity.id}')
+          : context.push('/activity/${activity.id}'),
     );
   }
 
@@ -194,12 +201,36 @@ class _ActivityRow extends ConsumerWidget {
           width: 10,
           height: 28,
           decoration: BoxDecoration(
-            color: zone?.color.withValues(alpha: 0.85) ??
+            color:
+                zone?.color.withValues(alpha: 0.85) ??
                 const Color(0xFF9090A8).withValues(alpha: 0.25),
             borderRadius: BorderRadius.circular(3),
           ),
         );
       }).toList(),
+    );
+  }
+}
+
+class _RecordingChip extends StatelessWidget {
+  const _RecordingChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 4,
+      children: [
+        Icon(Icons.fiber_manual_record, size: 10, color: scheme.error),
+        Text(
+          'Live',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: scheme.error,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

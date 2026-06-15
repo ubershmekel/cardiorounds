@@ -179,8 +179,9 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     final athlete = await db.ensureDefaultAthlete();
     final activityId = await _createActivity(athlete.id);
     ref.read(pendingHrSourceProvider.notifier).state = source;
+    ref.read(activeRecordingIdProvider.notifier).state = activityId;
     if (!mounted) return;
-    context.go('/recording/$activityId');
+    context.go('/record/recording/$activityId');
   }
 
   Future<void> _onSyntheticTap() async {

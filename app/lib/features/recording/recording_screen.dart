@@ -77,6 +77,7 @@ class RecordingScreen extends ConsumerWidget {
     if (confirmed != true) return;
     await ref.read(recordingControllerProvider(activityId).notifier).stop();
     if (!context.mounted) return;
+    ref.read(activeRecordingIdProvider.notifier).state = null;
     context.go('/activity/$activityId');
   }
 
@@ -105,9 +106,7 @@ class RecordingScreen extends ConsumerWidget {
     final latestMs = points.isEmpty ? 0 : points.last.tMs;
     final firstMs = points.isEmpty ? 0 : points.first.tMs;
 
-    return PopScope(
-      canPop: false,
-      child: Scaffold(
+    return Scaffold(
         appBar: AppBar(
           title: Text(state.deviceName),
           automaticallyImplyLeading: false,
@@ -206,8 +205,7 @@ class RecordingScreen extends ConsumerWidget {
             );
           },
         ),
-      ),
-    );
+      );
   }
 }
 
