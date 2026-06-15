@@ -14,13 +14,11 @@ Implementation tasks in priority order. Delete lines that are done.
   user to continue or not
 - Tap to tag a moment or label during recording. Tap moments: Recovery start,
   Recovery end, Round start, Round end, Note, Other.
-- Show time when tapping a HR chart not just bpm
 - Allow zoom when trimming chart, also it kind of is stuck sometimes and lags
   and I can't move the right handle, we should fix that and have some visual
   effect when the handle is being dragged.
 - Tap-to-tag button writes a `moment` point marker during recording
 - Session shape sparkline (3 block chars stored in activities.sparkline)
-- Historical activity list with sparkline, load, duration
 - Round detection (automatic effort period segmentation); stored as `round` span
   markers
 - Recovery event detection button (Z5 → Z3 drop timing); stored as `recovery`
