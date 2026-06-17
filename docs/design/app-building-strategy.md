@@ -34,6 +34,33 @@ explaining why.
 
 ---
 
+## Navigation
+
+The app uses `go_router` with a `StatefulShellRoute.indexedStack` for the three
+main tabs (Home, Record, Settings). Key rules:
+
+- **Nested routes stay in their branch.** A route nested under `/record/` belongs
+  to the Record branch and its widget tree stays alive in the IndexedStack when
+  the user switches tabs. Top-level routes (`parentNavigatorKey: rootKey`) replace
+  the shell and should only be used for true full-screen overlays (e.g. the
+  Activity detail screen).
+- **Use `push`, not `go`, to open a root-level overlay while keeping the shell
+  alive.** `context.go()` replaces the entire stack; `context.push()` overlays.
+- **Document structural decisions in `router.dart`.** URL paths are the routing
+  grammar — their shape determines which navigator owns a route.
+
+## Provider Lifecycle
+
+- **Short-lived UI state:** use `.autoDispose` (the default); Riverpod cleans up
+  when no widget is watching.
+- **Background operations that must outlive their screen** (e.g. the recording
+  controller): use `.autoDispose` + `ref.keepAlive()`. Call `keepAlive.close()`
+  via a callback once the operation finishes so Riverpod can dispose the provider
+  after the user navigates away. Do **not** simply remove `.autoDispose` — that
+  leaks timers and subscriptions for the lifetime of the app.
+
+---
+
 ## Repo Layout
 
 The Flutter project lives in `app/`, not at the repo root. This keeps `docs/`,

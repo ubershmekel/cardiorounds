@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_logger.dart';
@@ -78,6 +79,7 @@ class RecordingController extends StateNotifier<RecordingState> {
     required this.source,
     required int activityId,
     ZoneSetup? zoneSetup,
+    this.onStopped,
   }) : _started = DateTime.now(),
        _zoneSetup = zoneSetup,
        super(
@@ -135,6 +137,7 @@ class RecordingController extends StateNotifier<RecordingState> {
 
   final AppDatabase db;
   final HeartRateSource source;
+  final VoidCallback? onStopped;
   final DateTime _started;
   final ZoneSetup? _zoneSetup;
   final RecordingLiveActivity _liveActivity = const RecordingLiveActivity();
@@ -240,27 +243,39 @@ class RecordingController extends StateNotifier<RecordingState> {
       'Stopping activity ${state.activityId} on ${source.deviceName} after ${state.elapsed.inSeconds}s',
     );
     state = state.copyWith(stopped: true);
-    final elapsedMs = DateTime.now().difference(_started).inMilliseconds;
-    await db.finalizeActivity(
-      activityId: state.activityId,
-      durationMs: elapsedMs,
-    );
-    await db.computeAndSaveShape(state.activityId);
-    await _liveActivity.end(activityId: state.activityId);
-    await _sub.cancel();
-    await _statusSub.cancel();
+    try {
+      final elapsedMs = DateTime.now().difference(_started).inMilliseconds;
+      await db.finalizeActivity(
+        activityId: state.activityId,
+        durationMs: elapsedMs,
+      );
+      await db.computeAndSaveShape(state.activityId);
+    } catch (e) {
+      appLog('Recording', 'Error finalizing activity ${state.activityId}: $e');
+    } finally {
+      await _shutdownResources();
+      onStopped?.call();
+    }
+  }
+
+  /// Cancels timers, subscriptions, live activity, and source. Each step is
+  /// attempted independently so a failure in one does not block the others.
+  Future<void> _shutdownResources() async {
     _ticker.cancel();
     _statsTicker.cancel();
-    await source.dispose();
+    try { await _sub.cancel(); } catch (e) { appLog('Recording', 'HR sub cancel error: $e'); }
+    try { await _statusSub.cancel(); } catch (e) { appLog('Recording', 'Status sub cancel error: $e'); }
+    try { await _liveActivity.end(activityId: state.activityId); } catch (e) { appLog('Recording', 'Live activity end error: $e'); }
+    try { await source.dispose(); } catch (e) { appLog('Recording', 'Source dispose error: $e'); }
   }
 
   @override
   void dispose() {
     _ticker.cancel();
     _statsTicker.cancel();
-    _sub.cancel();
-    _statusSub.cancel();
     if (!state.stopped) {
+      _sub.cancel();
+      _statusSub.cancel();
       _liveActivity.end(activityId: state.activityId);
       source.dispose();
     }
@@ -270,6 +285,10 @@ class RecordingController extends StateNotifier<RecordingState> {
 
 final recordingControllerProvider = StateNotifierProvider.autoDispose
     .family<RecordingController, RecordingState, int>((ref, activityId) {
+      // keepAlive ensures recording continues even when no widget is watching
+      // (e.g. user navigated to the Home tab). Released in onStopped so Riverpod
+      // can dispose the controller once the user navigates away after stopping.
+      final keepAlive = ref.keepAlive();
       final db = ref.watch(databaseProvider);
       final athlete = ref.read(defaultAthleteProvider).valueOrNull;
       // Picker writes here before navigating to the recording screen. Fall back to
@@ -293,5 +312,6 @@ final recordingControllerProvider = StateNotifierProvider.autoDispose
           maxHr: athlete?.maxHeartrate,
           restingHr: athlete?.restingHeartrate,
         ),
+        onStopped: keepAlive.close,
       );
     });
