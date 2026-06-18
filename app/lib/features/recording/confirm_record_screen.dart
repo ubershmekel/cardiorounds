@@ -6,6 +6,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/colors.dart';
 import '../../core/app_logger.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
@@ -36,12 +37,21 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   Timer? _autoStartTimer;
   List<ScanResult> _results = const [];
   Device? _onlyKnownDevice;
+  Set<String> _knownPlatformIds = {};
   ScanResult? _autoStartResult;
   String? _autoStartPlatformId;
   int? _autoStartSecondsRemaining;
+  // Set when the user explicitly dismisses the countdown; prevents it from
+  // restarting on subsequent scan results within the same screen visit.
+  bool _autoStartDismissed = false;
   bool _scanning = false;
   bool _connecting = false;
   String? _error;
+  BluetoothHeartRateSource? _monitorSource;
+  String? _monitoringPlatformId;
+  ScanResult? _monitorScanResult;
+  int? _monitorBpm;
+  StreamSubscription<HrSample>? _monitorSampleSub;
 
   bool get _showFakeStrap => kIsWeb || kDebugMode;
 
@@ -52,14 +62,14 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     if (!kIsWeb) {
       _scanner = BluetoothHrScanner();
       _scanResultsSub = _scanner!.results.listen(_handleScanResults);
-      _loadOnlyKnownDevice();
+      _loadKnownDevices();
       _startScan();
       _scanTimer = Timer.periodic(_scanInterval, (_) => _startScan());
     }
   }
 
   Future<void> _startScan() async {
-    if (_scanning || _connecting) return;
+    if (_scanning || _connecting || _monitorSource != null) return;
     setState(() => _scanning = true);
     try {
       await _scanner?.start(timeout: _scanTimeout);
@@ -82,10 +92,13 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     }
   }
 
-  Future<void> _loadOnlyKnownDevice() async {
-    final onlyKnownDevice = await ref.read(databaseProvider).onlyKnownDevice();
+  Future<void> _loadKnownDevices() async {
+    final allDevices = await ref.read(databaseProvider).allDevices();
     if (!mounted) return;
-    setState(() => _onlyKnownDevice = onlyKnownDevice);
+    setState(() {
+      _knownPlatformIds = {for (final d in allDevices) d.platformId};
+      _onlyKnownDevice = allDevices.length == 1 ? allDevices.single : null;
+    });
     _maybeStartSingleDeviceCountdown(_results);
   }
 
@@ -103,7 +116,9 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     if (_connecting ||
         _autoStartTimer != null ||
         _autoStartPlatformId != null ||
-        _onlyKnownDevice == null) {
+        _onlyKnownDevice == null ||
+        _monitorSource != null ||
+        _autoStartDismissed) {
       return;
     }
     for (final result in results) {
@@ -152,11 +167,71 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     });
   }
 
+  // Called by the pause button — prevents the countdown from restarting within
+  // this screen visit even if the same device keeps appearing in scan results.
+  void _dismissAutoStartCountdown() {
+    _cancelAutoStartCountdown();
+    _autoStartDismissed = true;
+  }
+
+  Future<void> _startMonitoring(ScanResult result) async {
+    if (_connecting) return;
+    _cancelAutoStartCountdown();
+    if (_monitorSource != null) await _stopMonitoring();
+    setState(() {
+      _connecting = true;
+      _error = null;
+    });
+    try {
+      await _scanner?.stop();
+      final source = await BluetoothHeartRateSource.connect(result.device);
+      if (!mounted) {
+        await source.dispose();
+        return;
+      }
+      setState(() {
+        _monitorSource = source;
+        _monitoringPlatformId = result.device.remoteId.str;
+        _monitorScanResult = result;
+        _connecting = false;
+      });
+      _monitorSampleSub = source.samples.listen((sample) {
+        if (!mounted) return;
+        // null BPM means signal/contact loss — clear so UI shows "Connecting…"
+        setState(() => _monitorBpm = sample.bpm);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Could not connect: $e';
+        _connecting = false;
+      });
+      await _startScan();
+    }
+  }
+
+  Future<void> _stopMonitoring() async {
+    await _monitorSampleSub?.cancel();
+    _monitorSampleSub = null;
+    final source = _monitorSource;
+    _monitorSource = null;
+    await source?.dispose();
+    if (!mounted) return;
+    setState(() {
+      _monitoringPlatformId = null;
+      _monitorScanResult = null;
+      _monitorBpm = null;
+    });
+    _startScan();
+  }
+
   @override
   void dispose() {
     _scanTimer?.cancel();
     _autoStartTimer?.cancel();
     _scanResultsSub?.cancel();
+    _monitorSampleSub?.cancel();
+    _monitorSource?.dispose(); // fire-and-forget; dispose() can't await
     _sportTypeController.dispose();
     _sportTypeFocus.dispose();
     _scanner?.dispose();
@@ -187,6 +262,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   Future<void> _onSyntheticTap() async {
     if (_connecting) return;
     _cancelAutoStartCountdown();
+    if (_monitorSource != null) await _stopMonitoring();
     setState(() => _connecting = true);
     try {
       await _startWith(FakeHeartRateSource());
@@ -202,6 +278,39 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   Future<void> _onDeviceTap(ScanResult result) async {
     if (_connecting) return;
     _cancelAutoStartCountdown();
+
+    final platformId = result.device.remoteId.str;
+
+    // Reuse the active monitor connection if it's already for this device.
+    if (_monitoringPlatformId == platformId && _monitorSource != null) {
+      final source = _monitorSource!;
+      _monitorSource = null;
+      await _monitorSampleSub?.cancel();
+      _monitorSampleSub = null;
+      setState(() {
+        _connecting = true;
+        _error = null;
+        _monitoringPlatformId = null;
+        _monitorScanResult = null;
+        _monitorBpm = null;
+      });
+      try {
+        await ref
+            .read(databaseProvider)
+            .upsertDevice(platformId: platformId, name: source.deviceName);
+        await _startWith(source);
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _error = 'Could not start: $e';
+          _connecting = false;
+        });
+        await source.dispose();
+      }
+      return;
+    }
+
+    if (_monitorSource != null) await _stopMonitoring();
     setState(() {
       _connecting = true;
       _error = null;
@@ -212,7 +321,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       await ref
           .read(databaseProvider)
           .upsertDevice(
-            platformId: result.device.remoteId.str,
+            platformId: platformId,
             name: source.deviceName,
           );
       await _startWith(source);
@@ -293,6 +402,12 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   }
 
   List<Widget> _buildDevicePicker(BuildContext context) {
+    // Monitored device stays pinned at top even when scanning has stopped.
+    final displayedResults = [
+      ?_monitorScanResult,
+      ..._results.where((r) => r.device.remoteId.str != _monitoringPlatformId),
+    ];
+
     return [
       Row(
         children: [
@@ -311,7 +426,8 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Scan again',
-              onPressed: _connecting ? null : _startScan,
+              onPressed:
+                  (_connecting || _monitorSource != null) ? null : _startScan,
             ),
         ],
       ),
@@ -319,13 +435,12 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       if (_showFakeStrap) ...[
         _PickerCard(
           title: 'Simulated Bluetooth strap',
-          subtitle: 'Debug heart-rate stream for simulator and emulator runs.',
-          icon: Icons.bug_report_outlined,
+          isSimulated: true,
           onTap: _connecting ? null : _onSyntheticTap,
         ),
         const SizedBox(height: 8),
       ],
-      if (_results.isEmpty && !_scanning)
+      if (displayedResults.isEmpty && !_scanning)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 24),
           child: Text(
@@ -335,71 +450,204 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
           ),
         )
       else
-        ..._results.map(
-          (r) => _PickerCard(
-            title: r.device.platformName.isEmpty
-                ? r.device.remoteId.str
-                : r.device.platformName,
-            subtitle: 'Signal ${r.rssi} dBm',
-            icon: Icons.favorite_outline,
-            actionLabel: _deviceActionLabel(r),
-            onTap: _connecting ? null : () => _onDeviceTap(r),
-          ),
-        ),
+        ...displayedResults.map((r) {
+          final platformId = r.device.remoteId.str;
+          final isKnown = _knownPlatformIds.contains(platformId);
+          final isMonitoring = _monitoringPlatformId == platformId;
+          final isCountingDown = _autoStartPlatformId == platformId;
+          // Non-monitored rows are stale while scanning is paused; dim them.
+          final stale = _monitorSource != null && !isMonitoring;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Opacity(
+              opacity: stale ? 0.4 : 1.0,
+              child: _PickerCard(
+              title: r.device.platformName.isEmpty
+                  ? platformId
+                  : r.device.platformName,
+              rssi: r.rssi,
+              isKnown: isKnown,
+              countdownSeconds: isCountingDown ? _autoStartSecondsRemaining : null,
+              monitorBpm: isMonitoring ? _monitorBpm : null,
+              isMonitoring: isMonitoring,
+              onTap: _connecting ? null : () => _onDeviceTap(r),
+              onMonitor: _connecting
+                  ? null
+                  : (isMonitoring
+                        ? _stopMonitoring
+                        : () => _startMonitoring(r)),
+              onCountdownCancel: isCountingDown
+                  ? _dismissAutoStartCountdown
+                  : null,
+            ),
+            ),
+          );
+        }),
     ];
-  }
-
-  String _deviceActionLabel(ScanResult result) {
-    if (result.device.remoteId.str == _autoStartPlatformId &&
-        _autoStartSecondsRemaining != null) {
-      return 'Starting in $_autoStartSecondsRemaining';
-    }
-    return 'Start recording';
   }
 }
 
 class _PickerCard extends StatelessWidget {
   const _PickerCard({
     required this.title,
-    required this.subtitle,
-    required this.icon,
-    this.actionLabel = 'Start recording',
+    this.rssi,
+    this.isKnown = false,
+    this.isSimulated = false,
+    this.countdownSeconds,
+    this.monitorBpm,
+    this.isMonitoring = false,
     required this.onTap,
+    this.onMonitor,
+    this.onCountdownCancel,
   });
 
   final String title;
-  final String subtitle;
-  final IconData icon;
-  final String actionLabel;
+  final int? rssi;
+  final bool isKnown;
+  final bool isSimulated;
+  final int? countdownSeconds;
+  final int? monitorBpm;
+  final bool isMonitoring;
   final VoidCallback? onTap;
+  final VoidCallback? onMonitor;
+  final VoidCallback? onCountdownCancel;
 
   @override
   Widget build(BuildContext context) {
+    final isCounting = countdownSeconds != null;
+    final iconColor = isSimulated
+        ? null
+        : countdownSeconds != null
+            ? AppColors.zoneMax      // Z5 pink  — auto-starting
+            : isKnown
+                ? AppColors.zoneHard // Z4 orange — recognised device
+                : AppColors.zoneBaseline; // grey — first-time device
+
+    Widget subtitle;
+    if (isSimulated) {
+      subtitle = Text(
+        'Debug heart-rate stream',
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    } else if (isMonitoring) {
+      final bpm = monitorBpm;
+      subtitle = Text(
+        bpm != null ? '$bpm BPM' : 'Connecting…',
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    } else {
+      subtitle = _SignalBars(rssi: rssi ?? -90);
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            Icon(icon),
+            Icon(
+              isSimulated ? Icons.bug_report_outlined : Icons.favorite,
+              color: iconColor,
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+                  const SizedBox(height: 4),
+                  subtitle,
                 ],
               ),
             ),
             const SizedBox(width: 12),
-            FilledButton.icon(
-              icon: const Icon(Icons.play_arrow),
-              label: Text(actionLabel),
-              onPressed: onTap,
-            ),
+            if (isCounting) ...[
+              // Tap to cancel the countdown; separate Start to fire immediately.
+              IconButton(
+                icon: const Icon(Icons.pause),
+                tooltip: 'Cancel auto-start',
+                onPressed: onCountdownCancel,
+              ),
+              FilledButton.icon(
+                icon: Text(
+                  '$countdownSeconds',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                label: const Icon(Icons.play_arrow, size: 18),
+                onPressed: onTap,
+              ),
+            ] else ...[
+              if (!isSimulated)
+                IconButton(
+                  icon: Icon(
+                    isMonitoring
+                        ? Icons.stop_circle_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                  tooltip: isMonitoring ? 'Stop monitoring' : 'Monitor HR',
+                  onPressed: onMonitor,
+                ),
+              FilledButton.icon(
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Start'),
+                onPressed: onTap,
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SignalBars extends StatelessWidget {
+  const _SignalBars({required this.rssi});
+  final int rssi;
+
+  int get _bars {
+    if (rssi >= -60) return 4;
+    if (rssi >= -70) return 3;
+    if (rssi >= -80) return 2;
+    return 1;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurface;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (int i = 0; i < 4; i++) ...[
+          if (i > 0) const SizedBox(width: 2),
+          _SignalBar(
+            height: 4.0 + i * 3.0,
+            active: i < _bars,
+            color: color,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SignalBar extends StatelessWidget {
+  const _SignalBar({
+    required this.height,
+    required this.active,
+    required this.color,
+  });
+  final double height;
+  final bool active;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 4,
+      height: height,
+      decoration: BoxDecoration(
+        color: active ? color : color.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(1),
       ),
     );
   }

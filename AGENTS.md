@@ -10,6 +10,18 @@
 - Do not edit generated output or build artifacts unless the user explicitly
   asks for regeneration.
 
+## Design–implementation sync
+
+- `docs/design/` has all the design documents. Keep them in sync with the code.
+  If there is a gap then an explicit decision needs to be made by the human on
+  whether to update the design or the implementation.
+- For example, `docs/design/screens.md` is the authoritative description of
+  every screen's UX. Keep it in sync with the implementation: when a screen's
+  behaviour or visual structure changes, update the relevant section in that
+  file in the same PR/commit.
+- When adding a new screen or a significant new state to an existing screen,
+  write its section in `screens.md` before or alongside the code — not after.
+
 ## Web Platform
 
 - Web is a UI playground and fast iteration target, not a production build.

@@ -35,32 +35,55 @@ At the bottom there is a floating nav bar with:
 This screen handles Bluetooth HR device connection before recording starts.
 
 A sport-type field is shown at the top (free text, pre-filled with the most
-recently used sport type). The user can change it here; it can also be changed
-on the activity review screen after the workout.
+recently used sport type, with autocomplete from past sport types). The user can
+change it here; it can also be changed on the activity review screen after the
+workout.
 
-### Auto-connect (returning user)
+### Device list
 
-If the app has a previously connected device, it immediately begins scanning and
-shows a spinner with "Connecting to [Device Name]…" and a countdown. Once
-connected, a "Start recording" button appears. The user can tap "Choose a
-different device" at any time to open the device picker instead.
+Shows a scrollable list of nearby Bluetooth HR devices found by continuous
+background scanning (2 s scan, 1 s gap, repeat). Each device card shows:
 
-If auto-connect does not succeed within 5 seconds, the device picker opens
-automatically.
+- A **colored heart icon** indicating recognition status:
+  - Grey — never seen before
+  - Orange (Z4) — previously connected
+  - Pink (Z5) — the auto-starting device (countdown active)
+- **Device name**
+- **Signal-strength bars** (1–4 bars; ≥ −60 dBm = 4, ≥ −70 = 3, ≥ −80 = 2, < −80
+  = 1)
+- An **eye button** (👁) to enter monitor mode (see below)
+- A **Start button** to connect and begin recording immediately
 
-### Device picker (first time or manual)
+### Auto-start countdown
 
-Shows a scrollable list of nearby Bluetooth HR devices found by scanning. Each
-row shows the device name and signal strength. Tapping a device attempts to
-connect. On success the device is saved to the `devices` table and the "Start
-recording" button appears.
+If exactly one device is known from a prior session and it appears in the scan,
+a 5-second countdown begins automatically. During the countdown:
+
+- The heart icon turns pink (Z5)
+- A **pause button** cancels the countdown without leaving the screen
+- The **Start button** fires the connection immediately
+
+If the device disappears from scan during the countdown, the countdown cancels.
+
+### Monitor mode (HR preview without recording)
+
+Tapping the eye button on a device card connects to that device and streams live
+BPM in place of the signal bars — without creating an activity. This lets the
+user verify sensor contact before starting. While monitoring:
+
+- Scanning pauses (the non-monitored devices are greyed out)
+- Tapping **Start** reuses the already-open BT connection (no reconnect)
+- Tapping the **stop button** (⏹) disconnects and resumes scanning
 
 ### States shown on this screen
 
-- Scanning / connecting… (spinner + countdown)
-- Connected — [Device Name] — ready to start
-- No devices found — retry button
-- Bluetooth is off — prompt to enable it
+- Scanning — spinner next to section header; refresh button when idle
+- Countdown — pink icon, pause button, countdown number
+- Monitoring — live BPM, stop button, Start button
+- Connecting / starting — full-screen spinner; buttons disabled
+- Error — red message above the list; scanning resumes
+- No devices found — instructional text with retry button
+- Bluetooth off — handled at the OS level before this screen is reached
 
 You can go back or cancel from any state.
 

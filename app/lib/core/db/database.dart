@@ -292,6 +292,9 @@ class AppDatabase extends _$AppDatabase {
             .get();
     return rememberedDevices.length == 1 ? rememberedDevices.single : null;
   }
+
+  Future<List<Device>> allDevices() =>
+      select(devices).get();
 }
 
 QueryExecutor _openConnection() {
