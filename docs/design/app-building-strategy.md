@@ -90,6 +90,14 @@ hot-reload iteration on static UI; it cannot exercise the BT or recording flow.
 Desktop platforms (windows, macos, linux) were removed; add back with
 `flutter create --platforms=windows .` (from inside `app/`) if ever needed.
 
+### iOS Release Compliance
+
+The Runner target declares App Store encryption export compliance in
+`app/ios/Runner/Info.plist` with `ITSAppUsesNonExemptEncryption` set to `false`.
+Keep that key in source control so App Store Connect does not require the answer
+to be re-entered for each upload. If Apple later provides a documentation key,
+add it to the same source plist rather than generated build output.
+
 ## Design Docs
 
 Maintain a `docs/design/` folder alongside the code. This is where product and
