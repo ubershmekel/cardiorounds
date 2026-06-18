@@ -27,11 +27,16 @@ if ! command -v pod >/dev/null 2>&1; then
   brew install cocoapods
 fi
 
-APP_VERSION="$(git -C "$APP_DIR" rev-parse --short HEAD) ($(git -C "$APP_DIR" log -1 --format=%cd --date=format:'%Y-%m-%d'))"
-
 cd "$APP_DIR"
+APP_VERSION="$(dart tool/build_metadata.dart app-version)"
+APP_BUILD_HASH="$(dart tool/build_metadata.dart build-hash)"
+APP_BUILD_DATE="$(dart tool/build_metadata.dart build-date)"
+
 flutter pub get
-flutter build ios --release --no-codesign --dart-define="APP_VERSION=$APP_VERSION"
+flutter build ios --release --no-codesign \
+  --dart-define="APP_VERSION=$APP_VERSION" \
+  --dart-define="APP_BUILD_HASH=$APP_BUILD_HASH" \
+  --dart-define="APP_BUILD_DATE=$APP_BUILD_DATE"
 
 cd "$IOS_DIR"
 pod install || {

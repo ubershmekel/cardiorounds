@@ -21,7 +21,9 @@ import 'hr_source.dart';
 class NativeBluetoothHeartRateSource implements HeartRateSource {
   NativeBluetoothHeartRateSource._(this._displayName, this._remoteId);
 
-  static const MethodChannel _channel = MethodChannel('cardiorounds/hr_central');
+  static const MethodChannel _channel = MethodChannel(
+    'cardiorounds/hr_central',
+  );
 
   // How often to pull buffered samples while the app is foregrounded. Has no
   // effect on what's captured in the background — the native buffer fills
@@ -60,10 +62,7 @@ class NativeBluetoothHeartRateSource implements HeartRateSource {
       'name': name,
     });
     source._emitStatus(HrSourceStatusKind.connected);
-    source._drainTimer = Timer.periodic(
-      _drainInterval,
-      (_) => source._drain(),
-    );
+    source._drainTimer = Timer.periodic(_drainInterval, (_) => source._drain());
     return source;
   }
 
@@ -109,11 +108,7 @@ class NativeBluetoothHeartRateSource implements HeartRateSource {
     }
   }
 
-  void _emitStatus(
-    HrSourceStatusKind kind, {
-    String? message,
-    DateTime? at,
-  }) {
+  void _emitStatus(HrSourceStatusKind kind, {String? message, DateTime? at}) {
     if (_status.isClosed) return;
     _status.add(
       HrSourceStatus(kind: kind, at: at ?? DateTime.now(), message: message),

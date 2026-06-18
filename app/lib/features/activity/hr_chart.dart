@@ -484,7 +484,9 @@ class HrChartPainter extends CustomPainter {
     );
 
     canvas.save();
-    canvas.clipRect(Rect.fromLTRB(g.plotLeft, g.plotTop, g.plotRight, g.plotBottom));
+    canvas.clipRect(
+      Rect.fromLTRB(g.plotLeft, g.plotTop, g.plotRight, g.plotBottom),
+    );
     _paintLine(canvas, g);
     _paintWorkoutWindow(canvas, g);
     _paintSelection(canvas, g);
@@ -1030,8 +1032,9 @@ class _EditableHrChartState extends State<EditableHrChart> {
     // Re-set it here so the circle stays inflated through the drag.
     setState(() => _active = handle);
     final g = _geometry(size);
-    _handleDragX =
-        g.xForT(handle == HrActiveHandle.start ? _start : _end).toDouble();
+    _handleDragX = g
+        .xForT(handle == HrActiveHandle.start ? _start : _end)
+        .toDouble();
   }
 
   void _onHandleDragUpdate(HrActiveHandle handle, double dx, Size size) {

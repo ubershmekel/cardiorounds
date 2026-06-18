@@ -8,10 +8,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_logger.dart';
+import '../../core/build_info.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 
-const String kAppVersion = '0.1.0';
 final Uri _sourceCodeUrl = Uri.parse(
   'https://github.com/ubershmekel/cardiorounds',
 );
@@ -188,7 +188,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('App version'),
-          subtitle: Text(kAppVersion),
+          subtitle: Text(appBuildLabel()),
         ),
         ...[
           const SizedBox(height: 32),

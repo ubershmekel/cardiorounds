@@ -142,22 +142,23 @@ class AppDatabase extends _$AppDatabase {
   /// writes them to shapeStart / shapeMid / shapeEnd. Call after finalizing or
   /// after the trim marker changes.
   Future<void> computeAndSaveShape(int activityId) async {
-    final sampleRows = await (select(samples)
-          ..where((s) => s.activityId.equals(activityId))
-          ..orderBy([(s) => OrderingTerm.asc(s.tMs)]))
-        .get();
+    final sampleRows =
+        await (select(samples)
+              ..where((s) => s.activityId.equals(activityId))
+              ..orderBy([(s) => OrderingTerm.asc(s.tMs)]))
+            .get();
 
-    final marker = await (select(markers)
-          ..where(
-            (m) =>
-                m.activityId.equals(activityId) & m.kind.equals('workout'),
-          )
-          ..limit(1))
-        .getSingleOrNull();
+    final marker =
+        await (select(markers)
+              ..where(
+                (m) =>
+                    m.activityId.equals(activityId) & m.kind.equals('workout'),
+              )
+              ..limit(1))
+            .getSingleOrNull();
 
     final startMs = marker?.tMs;
-    final endMs =
-        marker == null ? null : marker.tMs + (marker.durationMs ?? 0);
+    final endMs = marker == null ? null : marker.tMs + (marker.durationMs ?? 0);
 
     final filtered = sampleRows.where((r) {
       if (startMs != null && r.tMs < startMs) return false;
@@ -293,8 +294,7 @@ class AppDatabase extends _$AppDatabase {
     return rememberedDevices.length == 1 ? rememberedDevices.single : null;
   }
 
-  Future<List<Device>> allDevices() =>
-      select(devices).get();
+  Future<List<Device>> allDevices() => select(devices).get();
 }
 
 QueryExecutor _openConnection() {

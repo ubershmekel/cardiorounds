@@ -268,7 +268,9 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     required String platformId,
     required String name,
   }) async {
-    await ref.read(databaseProvider).upsertDevice(platformId: platformId, name: name);
+    await ref
+        .read(databaseProvider)
+        .upsertDevice(platformId: platformId, name: name);
     final source = await NativeBluetoothHeartRateSource.start(
       remoteId: platformId,
       name: name,
@@ -425,8 +427,9 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Scan again',
-              onPressed:
-                  (_connecting || _monitorSource != null) ? null : _startScan,
+              onPressed: (_connecting || _monitorSource != null)
+                  ? null
+                  : _startScan,
             ),
         ],
       ),
@@ -461,24 +464,26 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
             child: Opacity(
               opacity: stale ? 0.4 : 1.0,
               child: _PickerCard(
-              title: r.device.platformName.isEmpty
-                  ? platformId
-                  : r.device.platformName,
-              rssi: r.rssi,
-              isKnown: isKnown,
-              countdownSeconds: isCountingDown ? _autoStartSecondsRemaining : null,
-              monitorBpm: isMonitoring ? _monitorBpm : null,
-              isMonitoring: isMonitoring,
-              onTap: _connecting ? null : () => _onDeviceTap(r),
-              onMonitor: _connecting
-                  ? null
-                  : (isMonitoring
-                        ? _stopMonitoring
-                        : () => _startMonitoring(r)),
-              onCountdownCancel: isCountingDown
-                  ? _dismissAutoStartCountdown
-                  : null,
-            ),
+                title: r.device.platformName.isEmpty
+                    ? platformId
+                    : r.device.platformName,
+                rssi: r.rssi,
+                isKnown: isKnown,
+                countdownSeconds: isCountingDown
+                    ? _autoStartSecondsRemaining
+                    : null,
+                monitorBpm: isMonitoring ? _monitorBpm : null,
+                isMonitoring: isMonitoring,
+                onTap: _connecting ? null : () => _onDeviceTap(r),
+                onMonitor: _connecting
+                    ? null
+                    : (isMonitoring
+                          ? _stopMonitoring
+                          : () => _startMonitoring(r)),
+                onCountdownCancel: isCountingDown
+                    ? _dismissAutoStartCountdown
+                    : null,
+              ),
             ),
           );
         }),
@@ -517,10 +522,12 @@ class _PickerCard extends StatelessWidget {
     final iconColor = isSimulated
         ? null
         : countdownSeconds != null
-            ? AppColors.zoneMax      // Z5 pink  — auto-starting
-            : isKnown
-                ? AppColors.zoneHard // Z4 orange — recognised device
-                : AppColors.zoneBaseline; // grey — first-time device
+        ? AppColors
+              .zoneMax // Z5 pink  — auto-starting
+        : isKnown
+        ? AppColors
+              .zoneHard // Z4 orange — recognised device
+        : AppColors.zoneBaseline; // grey — first-time device
 
     Widget subtitle;
     if (isSimulated) {
@@ -618,11 +625,7 @@ class _SignalBars extends StatelessWidget {
       children: [
         for (int i = 0; i < 4; i++) ...[
           if (i > 0) const SizedBox(width: 2),
-          _SignalBar(
-            height: 4.0 + i * 3.0,
-            active: i < _bars,
-            color: color,
-          ),
+          _SignalBar(height: 4.0 + i * 3.0, active: i < _bars, color: color),
         ],
       ],
     );

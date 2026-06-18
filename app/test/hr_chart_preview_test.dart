@@ -48,9 +48,7 @@ Future<void> _pumpAndCapture(
       // the Ahem test-font boxes.
       theme: ThemeData(fontFamily: 'Arial'),
       home: Scaffold(
-        body: Center(
-          child: SizedBox(width: 360, height: 220, child: chart),
-        ),
+        body: Center(child: SizedBox(width: 360, height: 220, child: chart)),
       ),
     ),
   );
@@ -65,10 +63,9 @@ void main() {
     for (final path in _fontCandidates) {
       final file = File(path);
       if (!file.existsSync()) continue;
-      final loader = FontLoader('Arial')
-        ..addFont(
-          file.readAsBytes().then((bytes) => bytes.buffer.asByteData()),
-        );
+      final loader = FontLoader(
+        'Arial',
+      )..addFont(file.readAsBytes().then((bytes) => bytes.buffer.asByteData()));
       await loader.load();
       break;
     }

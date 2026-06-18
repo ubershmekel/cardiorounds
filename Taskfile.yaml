@@ -2,6 +2,10 @@
 
 version: "3"
 
+vars:
+  APP_DART_DEFINES:
+    sh: dart app/tool/build_metadata.dart dart-defines
+
 tasks:
   flutter-run:
     desc: Run the app in debug mode
@@ -27,29 +31,25 @@ tasks:
     desc: Build web with version info
     dir: app
     cmds:
-      - flutter build web --release --base-href /didit/
-        --dart-define="APP_VERSION=$(git rev-parse --short HEAD) ($(git log -1
-        --format=%cd --date=format:'%Y-%m-%d'))"
+      - flutter build web --release --base-href /didit/ {{.APP_DART_DEFINES}}
   build-android:
     desc: Build Android App Bundle with version info
     dir: app
     cmds:
-      - flutter build appbundle --release --dart-define="APP_VERSION=$(git
-        rev-parse --short HEAD) ($(git log -1 --format=%cd
-        --date=format:'%Y-%m-%d'))"
+      - flutter build appbundle --release {{.APP_DART_DEFINES}}
   build-ios:
-    desc: Build iOS IPA with version info
+    desc: Build iOS IPA with version info; does not bump pubspec version
     dir: app
     cmds:
-      - flutter build ipa --release --dart-define="APP_VERSION=$(git rev-parse
-        --short HEAD) ($(git log -1 --format=%cd --date=format:'%Y-%m-%d'))"
+      - flutter build ipa --release {{.APP_DART_DEFINES}}
   test:
     desc: Run all tests (excludes review-only preview image tests)
     dir: app
     cmds:
       - flutter test -r expanded -x preview
   previews:
-    desc: Regenerate review-only preview images (e.g. HR chart) under test/previews/
+    desc:
+      Regenerate review-only preview images (e.g. HR chart) under test/previews/
     dir: app
     cmds:
       - flutter test -t preview --update-goldens
@@ -59,20 +59,15 @@ tasks:
       - dart format app
       - npx prettier --write .
   bump:
+    desc: Alias for bump-version
+    cmds:
+      - task: bump-version
+  bump-version:
     desc:
       Auto-increment the build number in pubspec.yaml (e.g. 1.0.0+3 -> 1.0.0+4)
-    vars:
-      NAME:
-        sh:
-          'grep "^version:" app/pubspec.yaml | sed "s/version: //" | cut -d+ -f1'
-      NEW_BUILD:
-        sh:
-          'echo $(($(grep "^version:" app/pubspec.yaml | sed "s/version: //" |
-          cut -d+ -f2) + 1))'
+    dir: app
     cmds:
-      - 'sed -i "s/^version:.*/version: {{.NAME}}+{{.NEW_BUILD}}/"
-        app/pubspec.yaml'
-      - 'echo "Bumped to {{.NAME}}+{{.NEW_BUILD}}"'
+      - dart tool/build_metadata.dart bump-version
   gen-art:
     desc: Generate all platform icons and splash screens from logo source files
     dir: app

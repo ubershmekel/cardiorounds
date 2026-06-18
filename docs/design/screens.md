@@ -200,7 +200,7 @@ Show:
 - Max Heart Rate (with a "?" button linking to measurement guidance; see
   zones.md)
 - Resting Heart Rate (with a "?" button)
-- App version (date of build)
+- App version, build date, and commit hash when supplied by the build pipeline
 
 Zone colors are unlocked once max HR is set. The settings screen makes this
 visible with a short prompt when max HR is absent.

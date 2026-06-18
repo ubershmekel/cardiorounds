@@ -263,10 +263,26 @@ class RecordingController extends StateNotifier<RecordingState> {
   Future<void> _shutdownResources() async {
     _ticker.cancel();
     _statsTicker.cancel();
-    try { await _sub.cancel(); } catch (e) { appLog('Recording', 'HR sub cancel error: $e'); }
-    try { await _statusSub.cancel(); } catch (e) { appLog('Recording', 'Status sub cancel error: $e'); }
-    try { await _liveActivity.end(activityId: state.activityId); } catch (e) { appLog('Recording', 'Live activity end error: $e'); }
-    try { await source.dispose(); } catch (e) { appLog('Recording', 'Source dispose error: $e'); }
+    try {
+      await _sub.cancel();
+    } catch (e) {
+      appLog('Recording', 'HR sub cancel error: $e');
+    }
+    try {
+      await _statusSub.cancel();
+    } catch (e) {
+      appLog('Recording', 'Status sub cancel error: $e');
+    }
+    try {
+      await _liveActivity.end(activityId: state.activityId);
+    } catch (e) {
+      appLog('Recording', 'Live activity end error: $e');
+    }
+    try {
+      await source.dispose();
+    } catch (e) {
+      appLog('Recording', 'Source dispose error: $e');
+    }
   }
 
   @override

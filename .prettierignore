@@ -1,1 +1,17 @@
+# Flutter web bootstrap uses {{template}} syntax that Prettier mangles
+app/web/flutter_bootstrap.js
+
+# Generated Flutter web artifacts.
 app/web/drift_worker.js
+app/web/drift_worker.js.map
+app/web/drift_worker.js.deps
+
+# Flutter build caches and outputs.
+app/.dart_tool/
+app/build/
+
+# Generated platform icon and splash assets.
+app/ios/Runner/Assets.xcassets/
+app/android/app/src/main/res/drawable*/
+app/android/app/src/main/res/drawable-night*/
+app/android/app/src/main/res/mipmap*/

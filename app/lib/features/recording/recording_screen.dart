@@ -107,105 +107,105 @@ class RecordingScreen extends ConsumerWidget {
     final firstMs = points.isEmpty ? 0 : points.first.tMs;
 
     return Scaffold(
-        appBar: AppBar(
-          title: Text(state.deviceName),
-          automaticallyImplyLeading: false,
-        ),
-        body: LayoutBuilder(
-          builder: (context, constraints) {
-            final chartHeight = (constraints.maxHeight * 0.36).clamp(
-              220.0,
-              320.0,
-            );
+      appBar: AppBar(
+        title: Text(state.deviceName),
+        automaticallyImplyLeading: false,
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final chartHeight = (constraints.maxHeight * 0.36).clamp(
+            220.0,
+            320.0,
+          );
 
-            return SingleChildScrollView(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              bpmText,
-                              style: TextStyle(
-                                fontSize: 88,
-                                fontWeight: FontWeight.w600,
-                                color: bpmColor,
-                                height: 1.0,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'bpm',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ],
-                        ),
-                        Center(
-                          child: Text(
-                            _formatElapsed(state.elapsed),
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                        ),
-                        if (state.sourceStatus != HrSourceStatusKind.connected)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 16),
-                            child: _SignalStatusBanner(
-                              title: _signalTitle(state),
-                              subtitle: _signalSubtitle(state),
+          return SingleChildScrollView(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            bpmText,
+                            style: TextStyle(
+                              fontSize: 88,
+                              fontWeight: FontWeight.w600,
+                              color: bpmColor,
+                              height: 1.0,
                             ),
                           ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          height: chartHeight,
-                          child: TrailingZoomableHrChart(
-                            points: points,
-                            axis: axis,
-                            fullStartMs: firstMs,
-                            fullEndMs: latestMs,
-                            initialSpanMs: _liveWindowMs,
-                            lineColor: scheme.primary,
-                            zoneSetup: zoneSetup,
-                            activityStartMs:
-                                state.startedAt.millisecondsSinceEpoch,
+                          const SizedBox(width: 8),
+                          Text(
+                            'bpm',
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        HrStatsRow(stats: stats),
-                        if (zoneSetup != null) ...[
-                          const SizedBox(height: 24),
-                          ZoneBreakdown(setup: zoneSetup, times: zoneTimes!),
                         ],
-                        const SizedBox(height: 16),
-                        FilledButton.tonalIcon(
-                          onPressed: state.stopped
-                              ? null
-                              : () => _onStop(context, ref),
-                          icon: const Icon(Icons.stop_circle_outlined),
-                          label: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Text(
-                              state.stopped ? 'Stopping…' : 'Stop',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
+                      ),
+                      Center(
+                        child: Text(
+                          _formatElapsed(state.elapsed),
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                      ),
+                      if (state.sourceStatus != HrSourceStatusKind.connected)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: _SignalStatusBanner(
+                            title: _signalTitle(state),
+                            subtitle: _signalSubtitle(state),
                           ),
                         ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: chartHeight,
+                        child: TrailingZoomableHrChart(
+                          points: points,
+                          axis: axis,
+                          fullStartMs: firstMs,
+                          fullEndMs: latestMs,
+                          initialSpanMs: _liveWindowMs,
+                          lineColor: scheme.primary,
+                          zoneSetup: zoneSetup,
+                          activityStartMs:
+                              state.startedAt.millisecondsSinceEpoch,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      HrStatsRow(stats: stats),
+                      if (zoneSetup != null) ...[
+                        const SizedBox(height: 24),
+                        ZoneBreakdown(setup: zoneSetup, times: zoneTimes!),
                       ],
-                    ),
+                      const SizedBox(height: 16),
+                      FilledButton.tonalIcon(
+                        onPressed: state.stopped
+                            ? null
+                            : () => _onStop(context, ref),
+                        icon: const Icon(Icons.stop_circle_outlined),
+                        label: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            state.stopped ? 'Stopping…' : 'Stop',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            );
-          },
-        ),
-      );
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 
