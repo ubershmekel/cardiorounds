@@ -44,10 +44,15 @@ tasks:
       - flutter build ipa --release --dart-define="APP_VERSION=$(git rev-parse
         --short HEAD) ($(git log -1 --format=%cd --date=format:'%Y-%m-%d'))"
   test:
-    desc: Run all tests
+    desc: Run all tests (excludes review-only preview image tests)
     dir: app
     cmds:
-      - flutter test -r expanded
+      - flutter test -r expanded -x preview
+  previews:
+    desc: Regenerate review-only preview images (e.g. HR chart) under test/previews/
+    dir: app
+    cmds:
+      - flutter test -t preview --update-goldens
   format:
     desc: Format Dart code and Prettier-supported project files
     cmds:

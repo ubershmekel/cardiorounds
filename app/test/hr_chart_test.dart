@@ -21,9 +21,12 @@ void main() {
             width: 300,
             height: 200,
             child: HrChart(
-              points: const [
-                HrChartPoint(tMs: 0, hr: 120),
-                HrChartPoint(tMs: 60000, hr: 150),
+              // Samples every 5 s (within _maxSampleGapMs) ramping 120->150,
+              // so a tap mid-chart interpolates a real value rather than
+              // landing in a broken gap.
+              points: [
+                for (var s = 0; s <= 12; s++)
+                  HrChartPoint(tMs: s * 5000, hr: 120 + s * 25 ~/ 10),
               ],
               axis: HrAxisRange.forStats(minHr: 120, maxHr: 150),
               activityStartMs: activityStart,

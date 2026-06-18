@@ -12,6 +12,10 @@ class HrChartPoint {
   bool get isValidHr => hr != null && hr! > 0;
 }
 
+// Gaps longer than this between consecutive samples break the chart line,
+// so iOS background-suspension periods don't appear as flat interpolated lines.
+const int _maxSampleGapMs = 10000;
+
 const double _leftGutter = 36;
 const double _bottomGutter = 18;
 const double _topPad = 8;
@@ -258,6 +262,10 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
 
       final prev = previous;
       if (prev != null && prev.tMs <= tMs && tMs <= point.tMs) {
+        if (point.tMs - prev.tMs > _maxSampleGapMs) {
+          previous = point;
+          continue;
+        }
         if (prev.tMs == point.tMs) return hr;
         final ratio = (tMs - prev.tMs) / (point.tMs - prev.tMs);
         return (prev.hr! + (hr - prev.hr!) * ratio).round();
@@ -510,14 +518,20 @@ class HrChartPainter extends CustomPainter {
       basePaint.color = lineColor;
       final path = Path();
       var penDown = false;
+      int? prevTMs;
       for (final p in points) {
         if (p.tMs < startMs || p.tMs > endMs) {
           penDown = false;
+          prevTMs = null;
           continue;
         }
         if (!p.isValidHr) {
           penDown = false;
+          prevTMs = null;
           continue;
+        }
+        if (prevTMs != null && p.tMs - prevTMs > _maxSampleGapMs) {
+          penDown = false;
         }
         final offset = Offset(g.xForT(p.tMs), g.yForHr(p.hr!));
         if (penDown) {
@@ -526,6 +540,7 @@ class HrChartPainter extends CustomPainter {
           path.moveTo(offset.dx, offset.dy);
           penDown = true;
         }
+        prevTMs = p.tMs;
       }
       canvas.drawPath(path, basePaint);
       return;
@@ -540,13 +555,15 @@ class HrChartPainter extends CustomPainter {
         continue;
       }
       if (prev != null && prev.isValidHr) {
-        final zone = setup.zoneFor(prev.hr);
-        basePaint.color = zone?.color ?? lineColor;
-        canvas.drawLine(
-          Offset(g.xForT(prev.tMs), g.yForHr(prev.hr!)),
-          Offset(g.xForT(p.tMs), g.yForHr(p.hr!)),
-          basePaint,
-        );
+        if (p.tMs - prev.tMs <= _maxSampleGapMs) {
+          final zone = setup.zoneFor(prev.hr);
+          basePaint.color = zone?.color ?? lineColor;
+          canvas.drawLine(
+            Offset(g.xForT(prev.tMs), g.yForHr(prev.hr!)),
+            Offset(g.xForT(p.tMs), g.yForHr(p.hr!)),
+            basePaint,
+          );
+        }
       }
       prev = p;
     }

@@ -1,3 +1,6 @@
+# Review-only preview images (regenerate locally with `task previews`)
+/test/previews/
+
 # Miscellaneous
 *.class
 *.log
