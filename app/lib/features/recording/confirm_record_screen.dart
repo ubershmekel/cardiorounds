@@ -14,6 +14,7 @@ import '../../core/hr/bluetooth_hr_scanner.dart';
 import '../../core/hr/bluetooth_hr_source.dart';
 import '../../core/hr/fake_hr_source.dart';
 import '../../core/hr/hr_source.dart';
+import '../../core/hr/native_bluetooth_hr_source.dart';
 
 class ConfirmRecordScreen extends ConsumerStatefulWidget {
   const ConfirmRecordScreen({super.key});
@@ -259,6 +260,22 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     context.go('/record/recording/$activityId');
   }
 
+  // Hands recording off to the native-backed source, which keeps collecting
+  // heart-rate samples while iOS has the app suspended (see
+  // NativeBluetoothHeartRateSource). The flutter_blue_plus monitor connection
+  // used for the live preview is foreground-only and is disposed before this.
+  Future<void> _startNativeRecording({
+    required String platformId,
+    required String name,
+  }) async {
+    await ref.read(databaseProvider).upsertDevice(platformId: platformId, name: name);
+    final source = await NativeBluetoothHeartRateSource.start(
+      remoteId: platformId,
+      name: name,
+    );
+    await _startWith(source);
+  }
+
   Future<void> _onSyntheticTap() async {
     if (_connecting) return;
     _cancelAutoStartCountdown();
@@ -281,50 +298,32 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
 
     final platformId = result.device.remoteId.str;
 
-    // Reuse the active monitor connection if it's already for this device.
-    if (_monitoringPlatformId == platformId && _monitorSource != null) {
-      final source = _monitorSource!;
-      _monitorSource = null;
-      await _monitorSampleSub?.cancel();
-      _monitorSampleSub = null;
-      setState(() {
-        _connecting = true;
-        _error = null;
-        _monitoringPlatformId = null;
-        _monitorScanResult = null;
-        _monitorBpm = null;
-      });
-      try {
-        await ref
-            .read(databaseProvider)
-            .upsertDevice(platformId: platformId, name: source.deviceName);
-        await _startWith(source);
-      } catch (e) {
-        if (!mounted) return;
-        setState(() {
-          _error = 'Could not start: $e';
-          _connecting = false;
-        });
-        await source.dispose();
-      }
-      return;
-    }
+    // The live preview uses a flutter_blue_plus monitor connection. Recording is
+    // handed to the native source instead, so first tear down the preview
+    // connection (if any) to free the peripheral, then start native.
+    final name = _monitoringPlatformId == platformId && _monitorSource != null
+        ? _monitorSource!.deviceName
+        : (result.device.platformName.isNotEmpty
+              ? result.device.platformName
+              : platformId);
 
-    if (_monitorSource != null) await _stopMonitoring();
     setState(() {
       _connecting = true;
       _error = null;
     });
     try {
+      await _monitorSampleSub?.cancel();
+      _monitorSampleSub = null;
+      final monitor = _monitorSource;
+      _monitorSource = null;
+      await monitor?.dispose();
       await _scanner?.stop();
-      final source = await BluetoothHeartRateSource.connect(result.device);
-      await ref
-          .read(databaseProvider)
-          .upsertDevice(
-            platformId: platformId,
-            name: source.deviceName,
-          );
-      await _startWith(source);
+      setState(() {
+        _monitoringPlatformId = null;
+        _monitorScanResult = null;
+        _monitorBpm = null;
+      });
+      await _startNativeRecording(platformId: platformId, name: name);
     } catch (e) {
       if (!mounted) return;
       setState(() {

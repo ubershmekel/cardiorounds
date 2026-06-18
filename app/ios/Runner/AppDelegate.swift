@@ -5,6 +5,7 @@ import UIKit
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let liveActivityChannelName = "cardiorounds/live_activity"
   private var didRegisterLiveActivityChannel = false
+  private var didRegisterHrCentral = false
 
   @available(iOS 16.1, *)
   private var liveActivityController: LiveActivityController {
@@ -16,12 +17,25 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     registerLiveActivityChannel(pluginRegistry: self)
+    registerHrCentral(pluginRegistry: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     registerLiveActivityChannel(pluginRegistry: engineBridge.pluginRegistry)
+    registerHrCentral(pluginRegistry: engineBridge.pluginRegistry)
+  }
+
+  private func registerHrCentral(pluginRegistry: FlutterPluginRegistry) {
+    guard !didRegisterHrCentral else {
+      return
+    }
+    guard let registrar = pluginRegistry.registrar(forPlugin: "HrBackgroundCentral") else {
+      return
+    }
+    didRegisterHrCentral = true
+    HrBackgroundCentral.shared.register(with: registrar)
   }
 
   private func registerLiveActivityChannel(pluginRegistry: FlutterPluginRegistry) {
