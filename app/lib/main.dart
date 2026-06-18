@@ -13,14 +13,12 @@ Future<void> main() async {
 
 Future<void> _configureBluetoothBackgroundRestore() async {
   try {
-    // Flutter Blue Plus requires restoreState before any scan/connect work.
-    // Together with Info.plist bluetooth-central, this gives iOS a way to wake
-    // the app for restored BLE events; Dart still only gets a short background
-    // window, so the reconnect logs show whether recovery actually ran.
-    appLog('BT', '_configureBluetoothBackgroundRestore');
-    await FlutterBluePlus.setOptions(showPowerAlert: true, restoreState: true);
-    appLog('BT', 'FlutterBluePlus restoreState enabled');
+    // Recording-time BLE restoration is handled by the native CoreBluetooth
+    // central. FlutterBluePlus is still used for foreground scan/preview, so
+    // keep its power alert without asking it to own background restoration too.
+    await FlutterBluePlus.setOptions(showPowerAlert: true);
+    appLog('BT', 'FlutterBluePlus foreground options configured');
   } catch (e) {
-    appLog('BT', 'FlutterBluePlus restoreState setup failed: $e');
+    appLog('BT', 'FlutterBluePlus option setup failed: $e');
   }
 }

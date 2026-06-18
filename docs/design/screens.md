@@ -122,6 +122,10 @@ a round started and has not yet ended that label).
 - A reconnecting banner when BT connection is lost
 - Sport type — pre-filled from the picker, editable inline on review
 
+When recording starts, the app writes a diagnostic log line with the app build
+label, phone model identifier, iOS version, and platform so support logs can be
+correlated with device/OS-specific behavior and app releases.
+
 Future live-action buttons (tap-to-mark a moment, label a round, label a
 recovery period) will live here too. See Milestone 3 in `todo.md`.
 
