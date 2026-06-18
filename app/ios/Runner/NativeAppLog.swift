@@ -36,8 +36,8 @@ enum NativeAppLog {
       guard let url = fileURL, let data = line.data(using: .utf8) else { return }
       if let handle = try? FileHandle(forWritingTo: url) {
         defer { try? handle.close() }
-        _ = try? handle.seekToEnd()
-        try? handle.write(contentsOf: data)
+        handle.seekToEndOfFile()
+        handle.write(data)
       } else {
         // File may not exist yet if Dart hasn't logged this launch.
         try? data.write(to: url, options: .atomic)
