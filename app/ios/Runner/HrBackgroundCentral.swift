@@ -36,16 +36,21 @@ final class HrBackgroundCentral: NSObject {
   private var channel: FlutterMethodChannel?
 
   // Guards the buffers, which are written from the CoreBluetooth `queue` and
-  // read from the platform-channel thread during `drain`.
+  // read from the platform-channel thread during `drain` / `scanDrain`.
   private let lock = NSLock()
   private var sampleBuffer: [[String: Any]] = []
   private var eventBuffer: [[String: Any]] = []
+  // Keyed by UUID so repeated discoveries just update RSSI; never cleared until
+  // scanStop so the Dart side always sees the full accumulated list.
+  private var scanDevices: [UUID: [String: Any]] = [:]
 
   private var peripheral: CBPeripheral?
   private var targetId: UUID?
   private var desiredName: String?
   // True between `start` and `stop`; drives auto-reconnect on disconnect.
   private var recording = false
+  // True between `scanStart` and `scanStop`; fills scanDevices in didDiscover.
+  private var discoveryScanning = false
   // Deferred until the central reaches `.poweredOn`.
   private var pendingStart: (() -> Void)?
 
@@ -91,6 +96,13 @@ final class HrBackgroundCentral: NSObject {
     case "stop":
       stop()
       result(nil)
+    case "scanStart":
+      scanStart(result: result)
+    case "scanStop":
+      scanStop()
+      result(nil)
+    case "scanDrain":
+      result(scanDrain())
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -150,6 +162,72 @@ final class HrBackgroundCentral: NSObject {
       self.peripheral = nil
       self.targetId = nil
     }
+  }
+
+  // MARK: - Discovery scan
+
+  private func scanStart(result: @escaping FlutterResult) {
+    queue.async {
+      guard let central = self.central else {
+        result(FlutterError(code: "not_ready", message: "Central not initialised", details: nil))
+        return
+      }
+      NativeAppLog.log("BTNative", "scanStart")
+      self.lock.lock()
+      self.scanDevices.removeAll()
+      self.lock.unlock()
+      self.discoveryScanning = true
+      let startScan = {
+        central.scanForPeripherals(withServices: [Self.hrService])
+      }
+      if central.state == .poweredOn {
+        startScan()
+      } else {
+        // Chain onto any pending start closure; if there isn't one, set our own.
+        let existing = self.pendingStart
+        self.pendingStart = {
+          existing?()
+          startScan()
+        }
+      }
+      result(nil)
+    }
+  }
+
+  private func scanStop() {
+    queue.async {
+      NativeAppLog.log("BTNative", "scanStop")
+      self.discoveryScanning = false
+      // Only stop the hardware scan if we're not in the middle of a recording
+      // connect-scan (targetId set means we're hunting for a specific device).
+      if self.targetId == nil {
+        self.central?.stopScan()
+      }
+      self.lock.lock()
+      self.scanDevices.removeAll()
+      self.lock.unlock()
+    }
+  }
+
+  /// Returns all peripherals discovered since the last `scanStart`, sorted by
+  /// most-recently-updated. Does not clear — the list accumulates until
+  /// `scanStop` so the Dart side always sees the full picture between polls.
+  private func scanDrain() -> [[String: Any]] {
+    lock.lock()
+    let result = Array(scanDevices.values)
+    lock.unlock()
+    return result
+  }
+
+  private func appendScannedDevice(_ peripheral: CBPeripheral, rssi: Int) {
+    let entry: [String: Any] = [
+      "id": peripheral.identifier.uuidString,
+      "name": peripheral.name ?? "",
+      "rssi": rssi,
+    ]
+    lock.lock()
+    scanDevices[peripheral.identifier] = entry
+    lock.unlock()
   }
 
   // MARK: - Buffer
@@ -239,9 +317,13 @@ extension HrBackgroundCentral: CBCentralManagerDelegate {
     advertisementData: [String: Any],
     rssi RSSI: NSNumber
   ) {
-    // Reached only on the scan fallback when the peripheral wasn't cached.
-    guard let targetId, peripheral.identifier == targetId else { return }
-    connect(peripheral)
+    if discoveryScanning {
+      appendScannedDevice(peripheral, rssi: RSSI.intValue)
+    }
+    // Connect-scan fallback: we're hunting for a specific device by UUID.
+    if let targetId, peripheral.identifier == targetId {
+      connect(peripheral)
+    }
   }
 
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {

@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -13,8 +13,10 @@ import '../../core/db/providers.dart';
 import '../../core/hr/bluetooth_hr_scanner.dart';
 import '../../core/hr/bluetooth_hr_source.dart';
 import '../../core/hr/fake_hr_source.dart';
+import '../../core/hr/hr_scanner.dart';
 import '../../core/hr/hr_source.dart';
 import '../../core/hr/native_bluetooth_hr_source.dart';
+import '../../core/hr/native_hr_scanner.dart';
 
 class ConfirmRecordScreen extends ConsumerStatefulWidget {
   const ConfirmRecordScreen({super.key});
@@ -32,14 +34,14 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   final _sportTypeController = TextEditingController();
   final _sportTypeFocus = FocusNode();
   List<String> _pastSportTypes = const [];
-  BluetoothHrScanner? _scanner;
-  StreamSubscription<List<ScanResult>>? _scanResultsSub;
+  HrScanner? _scanner;
+  StreamSubscription<List<ScannedDevice>>? _scanResultsSub;
   Timer? _scanTimer;
   Timer? _autoStartTimer;
-  List<ScanResult> _results = const [];
+  List<ScannedDevice> _results = const [];
   Device? _onlyKnownDevice;
   Set<String> _knownPlatformIds = {};
-  ScanResult? _autoStartResult;
+  ScannedDevice? _autoStartDevice;
   String? _autoStartPlatformId;
   int? _autoStartSecondsRemaining;
   // Set when the user explicitly dismisses the countdown; prevents it from
@@ -48,24 +50,34 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   bool _scanning = false;
   bool _connecting = false;
   String? _error;
-  BluetoothHeartRateSource? _monitorSource;
+  // Abstract over FBP (Android) and native (iOS) preview sources.
+  HeartRateSource? _monitorSource;
   String? _monitoringPlatformId;
-  ScanResult? _monitorScanResult;
+  ScannedDevice? _monitorDevice;
   int? _monitorBpm;
   StreamSubscription<HrSample>? _monitorSampleSub;
 
   bool get _showFakeStrap => kIsWeb || kDebugMode;
+
+  // On iOS the native CoreBluetooth central handles scanning and preview, so
+  // connecting for preview and then recording uses a single uninterrupted
+  // connection. On Android we stay on FlutterBluePlus throughout.
+  bool get _useNative => !kIsWeb && Platform.isIOS;
 
   @override
   void initState() {
     super.initState();
     _prefillSportType();
     if (!kIsWeb) {
-      _scanner = BluetoothHrScanner();
+      _scanner = _useNative ? NativeHrScanner() : BluetoothHrScanner();
       _scanResultsSub = _scanner!.results.listen(_handleScanResults);
       _loadKnownDevices();
       _startScan();
-      _scanTimer = Timer.periodic(_scanInterval, (_) => _startScan());
+      // Native scanner accumulates results continuously; periodic re-scan only
+      // needed for FlutterBluePlus which times out after each window.
+      if (!_useNative) {
+        _scanTimer = Timer.periodic(_scanInterval, (_) => _startScan());
+      }
     }
   }
 
@@ -103,17 +115,17 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     _maybeStartSingleDeviceCountdown(_results);
   }
 
-  void _handleScanResults(List<ScanResult> results) {
+  void _handleScanResults(List<ScannedDevice> results) {
     if (!mounted) return;
     setState(() => _results = results);
     if (_autoStartPlatformId != null &&
-        !results.any((r) => r.device.remoteId.str == _autoStartPlatformId)) {
+        !results.any((d) => d.platformId == _autoStartPlatformId)) {
       _cancelAutoStartCountdown();
     }
     _maybeStartSingleDeviceCountdown(results);
   }
 
-  void _maybeStartSingleDeviceCountdown(List<ScanResult> results) {
+  void _maybeStartSingleDeviceCountdown(List<ScannedDevice> results) {
     if (_connecting ||
         _autoStartTimer != null ||
         _autoStartPlatformId != null ||
@@ -122,19 +134,19 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
         _autoStartDismissed) {
       return;
     }
-    for (final result in results) {
-      if (result.device.remoteId.str == _onlyKnownDevice!.platformId) {
-        _beginAutoStartCountdown(result);
+    for (final device in results) {
+      if (device.platformId == _onlyKnownDevice!.platformId) {
+        _beginAutoStartCountdown(device);
         return;
       }
     }
   }
 
-  void _beginAutoStartCountdown(ScanResult result) {
+  void _beginAutoStartCountdown(ScannedDevice device) {
     if (!mounted) return;
     setState(() {
-      _autoStartResult = result;
-      _autoStartPlatformId = result.device.remoteId.str;
+      _autoStartDevice = device;
+      _autoStartPlatformId = device.platformId;
       _autoStartSecondsRemaining = _autoStartDelaySeconds;
     });
     _autoStartTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -148,9 +160,9 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
         return;
       }
       if (remaining <= 1) {
-        final result = _autoStartResult;
+        final device = _autoStartDevice;
         _cancelAutoStartCountdown();
-        if (result != null) _onDeviceTap(result);
+        if (device != null) _onDeviceTap(device);
         return;
       }
       setState(() => _autoStartSecondsRemaining = remaining - 1);
@@ -162,20 +174,18 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     _autoStartTimer = null;
     if (!mounted) return;
     setState(() {
-      _autoStartResult = null;
+      _autoStartDevice = null;
       _autoStartPlatformId = null;
       _autoStartSecondsRemaining = null;
     });
   }
 
-  // Called by the pause button — prevents the countdown from restarting within
-  // this screen visit even if the same device keeps appearing in scan results.
   void _dismissAutoStartCountdown() {
     _cancelAutoStartCountdown();
     _autoStartDismissed = true;
   }
 
-  Future<void> _startMonitoring(ScanResult result) async {
+  Future<void> _startMonitoring(ScannedDevice device) async {
     if (_connecting) return;
     _cancelAutoStartCountdown();
     if (_monitorSource != null) await _stopMonitoring();
@@ -185,20 +195,30 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     });
     try {
       await _scanner?.stop();
-      final source = await BluetoothHeartRateSource.connect(result.device);
+      final HeartRateSource source;
+      if (_useNative) {
+        source = await NativeBluetoothHeartRateSource.start(
+          remoteId: device.platformId,
+          name: device.name,
+        );
+      } else {
+        source = await BluetoothHeartRateSource.connect(
+          device.platformId,
+          name: device.name,
+        );
+      }
       if (!mounted) {
         await source.dispose();
         return;
       }
       setState(() {
         _monitorSource = source;
-        _monitoringPlatformId = result.device.remoteId.str;
-        _monitorScanResult = result;
+        _monitoringPlatformId = device.platformId;
+        _monitorDevice = device;
         _connecting = false;
       });
       _monitorSampleSub = source.samples.listen((sample) {
         if (!mounted) return;
-        // null BPM means signal/contact loss — clear so UI shows "Connecting…"
         setState(() => _monitorBpm = sample.bpm);
       });
     } catch (e) {
@@ -220,7 +240,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     if (!mounted) return;
     setState(() {
       _monitoringPlatformId = null;
-      _monitorScanResult = null;
+      _monitorDevice = null;
       _monitorBpm = null;
     });
     _startScan();
@@ -260,24 +280,6 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     context.go('/record/recording/$activityId');
   }
 
-  // Hands recording off to the native-backed source, which keeps collecting
-  // heart-rate samples while iOS has the app suspended (see
-  // NativeBluetoothHeartRateSource). The flutter_blue_plus monitor connection
-  // used for the live preview is foreground-only and is disposed before this.
-  Future<void> _startNativeRecording({
-    required String platformId,
-    required String name,
-  }) async {
-    await ref
-        .read(databaseProvider)
-        .upsertDevice(platformId: platformId, name: name);
-    final source = await NativeBluetoothHeartRateSource.start(
-      remoteId: platformId,
-      name: name,
-    );
-    await _startWith(source);
-  }
-
   Future<void> _onSyntheticTap() async {
     if (_connecting) return;
     _cancelAutoStartCountdown();
@@ -294,38 +296,77 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     }
   }
 
-  Future<void> _onDeviceTap(ScanResult result) async {
+  Future<void> _onDeviceTap(ScannedDevice device) async {
     if (_connecting) return;
     _cancelAutoStartCountdown();
 
-    final platformId = result.device.remoteId.str;
-
-    // The live preview uses a flutter_blue_plus monitor connection. Recording is
-    // handed to the native source instead, so first tear down the preview
-    // connection (if any) to free the peripheral, then start native.
-    final name = _monitoringPlatformId == platformId && _monitorSource != null
+    final name = _monitoringPlatformId == device.platformId &&
+            _monitorSource != null
         ? _monitorSource!.deviceName
-        : (result.device.platformName.isNotEmpty
-              ? result.device.platformName
-              : platformId);
+        : device.name;
 
     setState(() {
       _connecting = true;
       _error = null;
     });
+
     try {
+      // On iOS, if we're already monitoring this exact device, hand the live
+      // connection straight to the recording controller — no disconnect at all.
+      if (_useNative &&
+          _monitoringPlatformId == device.platformId &&
+          _monitorSource != null) {
+        final source = _monitorSource!;
+        _monitorSource = null; // transfer ownership; don't dispose
+        await _monitorSampleSub?.cancel();
+        _monitorSampleSub = null;
+        if (mounted) {
+          setState(() {
+            _monitoringPlatformId = null;
+            _monitorDevice = null;
+            _monitorBpm = null;
+          });
+        }
+        await _scanner?.stop();
+        await ref
+            .read(databaseProvider)
+            .upsertDevice(platformId: device.platformId, name: name);
+        await _startWith(source);
+        return;
+      }
+
+      // Otherwise: tear down any existing preview and start fresh.
       await _monitorSampleSub?.cancel();
       _monitorSampleSub = null;
       final monitor = _monitorSource;
       _monitorSource = null;
       await monitor?.dispose();
       await _scanner?.stop();
-      setState(() {
-        _monitoringPlatformId = null;
-        _monitorScanResult = null;
-        _monitorBpm = null;
-      });
-      await _startNativeRecording(platformId: platformId, name: name);
+      if (mounted) {
+        setState(() {
+          _monitoringPlatformId = null;
+          _monitorDevice = null;
+          _monitorBpm = null;
+        });
+      }
+
+      await ref
+          .read(databaseProvider)
+          .upsertDevice(platformId: device.platformId, name: name);
+
+      final HeartRateSource source;
+      if (_useNative) {
+        source = await NativeBluetoothHeartRateSource.start(
+          remoteId: device.platformId,
+          name: name,
+        );
+      } else {
+        source = await BluetoothHeartRateSource.connect(
+          device.platformId,
+          name: name,
+        );
+      }
+      await _startWith(source);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -405,8 +446,8 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   List<Widget> _buildDevicePicker(BuildContext context) {
     // Monitored device stays pinned at top even when scanning has stopped.
     final displayedResults = [
-      ?_monitorScanResult,
-      ..._results.where((r) => r.device.remoteId.str != _monitoringPlatformId),
+      ?_monitorDevice,
+      ..._results.where((d) => d.platformId != _monitoringPlatformId),
     ];
 
     return [
@@ -452,11 +493,10 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
           ),
         )
       else
-        ...displayedResults.map((r) {
-          final platformId = r.device.remoteId.str;
-          final isKnown = _knownPlatformIds.contains(platformId);
-          final isMonitoring = _monitoringPlatformId == platformId;
-          final isCountingDown = _autoStartPlatformId == platformId;
+        ...displayedResults.map((device) {
+          final isKnown = _knownPlatformIds.contains(device.platformId);
+          final isMonitoring = _monitoringPlatformId == device.platformId;
+          final isCountingDown = _autoStartPlatformId == device.platformId;
           // Non-monitored rows are stale while scanning is paused; dim them.
           final stale = _monitorSource != null && !isMonitoring;
           return Padding(
@@ -464,22 +504,20 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
             child: Opacity(
               opacity: stale ? 0.4 : 1.0,
               child: _PickerCard(
-                title: r.device.platformName.isEmpty
-                    ? platformId
-                    : r.device.platformName,
-                rssi: r.rssi,
+                title: device.name,
+                rssi: device.rssi,
                 isKnown: isKnown,
                 countdownSeconds: isCountingDown
                     ? _autoStartSecondsRemaining
                     : null,
                 monitorBpm: isMonitoring ? _monitorBpm : null,
                 isMonitoring: isMonitoring,
-                onTap: _connecting ? null : () => _onDeviceTap(r),
+                onTap: _connecting ? null : () => _onDeviceTap(device),
                 onMonitor: _connecting
                     ? null
                     : (isMonitoring
                           ? _stopMonitoring
-                          : () => _startMonitoring(r)),
+                          : () => _startMonitoring(device)),
                 onCountdownCancel: isCountingDown
                     ? _dismissAutoStartCountdown
                     : null,

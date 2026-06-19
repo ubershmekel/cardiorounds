@@ -63,10 +63,12 @@ class BluetoothHeartRateSource implements HeartRateSource {
   Stream<HrSourceStatus> get status => _status.stream;
 
   static Future<BluetoothHeartRateSource> connect(
-    BluetoothDevice device, {
+    String remoteId, {
+    String name = '',
     Duration timeout = const Duration(seconds: 10),
   }) async {
-    final displayName = _bestName(device);
+    final device = BluetoothDevice(remoteId: DeviceIdentifier(remoteId));
+    final displayName = name.isNotEmpty ? name : remoteId;
     final source = BluetoothHeartRateSource._(device, displayName);
     source._connectionSub = device.connectionState.listen(
       source._handleConnectionState,
@@ -264,12 +266,6 @@ class BluetoothHeartRateSource implements HeartRateSource {
     if (!_disposed && _signalLost) {
       _scheduleReconnect();
     }
-  }
-
-  static String _bestName(BluetoothDevice device) {
-    final name = device.platformName;
-    if (name.isNotEmpty) return name;
-    return device.remoteId.str;
   }
 
   @override

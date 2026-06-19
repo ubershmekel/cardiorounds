@@ -4,16 +4,19 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../app_logger.dart';
 import 'bluetooth_hr_source.dart';
+import 'hr_scanner.dart';
 
-class BluetoothHrScanner {
+class BluetoothHrScanner implements HrScanner {
   BluetoothHrScanner();
 
   final Set<DeviceIdentifier> _seen = {};
-  final _results = StreamController<List<ScanResult>>.broadcast();
+  final _results = StreamController<List<ScannedDevice>>.broadcast();
   StreamSubscription<List<ScanResult>>? _sub;
 
-  Stream<List<ScanResult>> get results => _results.stream;
+  @override
+  Stream<List<ScannedDevice>> get results => _results.stream;
 
+  @override
   Future<void> start({Duration timeout = const Duration(seconds: 30)}) async {
     appLog('BTScan', 'Starting scan (timeout: ${timeout.inSeconds}s)');
     _seen.clear();
@@ -39,15 +42,26 @@ class BluetoothHrScanner {
     );
   }
 
-  List<ScanResult> _dedupedSorted() {
+  List<ScannedDevice> _dedupedSorted() {
     final byId = <DeviceIdentifier, ScanResult>{};
     for (final r in FlutterBluePlus.lastScanResults) {
       byId[r.device.remoteId] = r;
     }
-    final list = byId.values.toList()..sort((a, b) => b.rssi.compareTo(a.rssi));
-    return list;
+    return byId.values
+        .map(
+          (r) => ScannedDevice(
+            platformId: r.device.remoteId.str,
+            name: r.device.platformName.isNotEmpty
+                ? r.device.platformName
+                : r.device.remoteId.str,
+            rssi: r.rssi,
+          ),
+        )
+        .toList()
+      ..sort((a, b) => b.rssi.compareTo(a.rssi));
   }
 
+  @override
   Future<void> stop() async {
     appLog('BTScan', 'Stopping scan');
     await FlutterBluePlus.stopScan();
@@ -55,6 +69,7 @@ class BluetoothHrScanner {
     _sub = null;
   }
 
+  @override
   Future<void> dispose() async {
     await stop();
     await _results.close();
