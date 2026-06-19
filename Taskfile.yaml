@@ -7,7 +7,7 @@ vars:
     sh: dart app/tool/build_metadata.dart dart-defines
 
 tasks:
-  flutter-run:
+  run:
     desc: Run the app in debug mode
     dir: app
     cmds:
