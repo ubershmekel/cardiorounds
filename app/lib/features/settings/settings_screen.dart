@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_logger.dart';
 import '../../core/build_info.dart';
+import '../../core/runtime_environment.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 
@@ -220,14 +221,23 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           OutlinedButton.icon(
             icon: const Icon(Icons.article_outlined),
             label: const Text('Export logs'),
-            onPressed: () => _exportFile(
-              context,
-              getFile: AppLogger.instance.resolveLogFile,
-              subject: 'Cardio Rounds logs',
-            ),
+            onPressed: () => _exportLogs(context),
           ),
         ],
       ],
+    );
+  }
+
+  Future<void> _exportLogs(BuildContext context) async {
+    try {
+      final env = await runtimeEnvironmentInfo();
+      appLog('Export', env.activityLogLabel);
+    } catch (_) {}
+    if (!context.mounted) return;
+    await _exportFile(
+      context,
+      getFile: AppLogger.instance.resolveLogFile,
+      subject: 'Cardio Rounds logs',
     );
   }
 

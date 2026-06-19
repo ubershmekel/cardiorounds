@@ -8,7 +8,6 @@ import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 import '../../core/hr/fake_hr_source.dart';
 import '../../core/hr/hr_source.dart';
-import '../../core/runtime_environment.dart';
 import '../../core/zones/zones.dart';
 import 'live_activity.dart';
 
@@ -98,7 +97,6 @@ class RecordingController extends StateNotifier<RecordingState> {
          ),
        ) {
     appLog('Recording', 'Started activity $activityId on ${source.deviceName}');
-    unawaited(_logRuntimeEnvironment(activityId));
     _liveActivity.start(
       activityId: activityId,
       deviceName: source.deviceName,
@@ -149,18 +147,6 @@ class RecordingController extends StateNotifier<RecordingState> {
   late final Timer _statsTicker;
   int _sampleCount = 0;
   late DateTime _lastStatsTick;
-
-  Future<void> _logRuntimeEnvironment(int activityId) async {
-    try {
-      final environment = await runtimeEnvironmentInfo();
-      appLog(
-        'Recording',
-        'Activity $activityId environment: ${environment.activityLogLabel}',
-      );
-    } catch (e) {
-      appLog('Recording', 'Activity $activityId environment unavailable: $e');
-    }
-  }
 
   Future<void> _onSample(HrSample sample) async {
     if (state.stopped) return;
