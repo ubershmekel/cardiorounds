@@ -12,6 +12,7 @@ import '../../core/build_info.dart';
 import '../../core/runtime_environment.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
+import '../../core/settings/app_settings.dart';
 
 final Uri _sourceCodeUrl = Uri.parse(
   'https://github.com/ubershmekel/cardiorounds',
@@ -222,6 +223,18 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
             icon: const Icon(Icons.article_outlined),
             label: const Text('Export logs'),
             onPressed: () => _exportLogs(context),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.bug_report_outlined),
+            title: const Text('Fake heart-rate device'),
+            subtitle: const Text(
+              'Offer a simulated strap when starting a recording for testing the app.',
+            ),
+            value: ref.watch(fakeHrDeviceEnabledProvider),
+            onChanged: (enabled) =>
+                ref.read(fakeHrDeviceEnabledProvider.notifier).set(enabled),
           ),
         ],
       ],

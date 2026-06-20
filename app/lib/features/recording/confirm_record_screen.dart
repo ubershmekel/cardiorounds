@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +17,7 @@ import '../../core/hr/hr_scanner.dart';
 import '../../core/hr/hr_source.dart';
 import '../../core/hr/native_bluetooth_hr_source.dart';
 import '../../core/hr/native_hr_scanner.dart';
+import '../../core/settings/app_settings.dart';
 
 class ConfirmRecordScreen extends ConsumerStatefulWidget {
   const ConfirmRecordScreen({super.key});
@@ -57,7 +58,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   int? _monitorBpm;
   StreamSubscription<HrSample>? _monitorSampleSub;
 
-  bool get _showFakeStrap => kIsWeb || kDebugMode;
+  bool get _showFakeStrap => ref.watch(fakeHrDeviceEnabledProvider);
 
   // On iOS the native CoreBluetooth central handles scanning and preview, so
   // connecting for preview and then recording uses a single uninterrupted
