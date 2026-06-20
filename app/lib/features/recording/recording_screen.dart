@@ -14,10 +14,67 @@ import 'recording_controller.dart';
 
 const int _liveWindowMs = 15 * 60 * 1000;
 
-class RecordingScreen extends ConsumerWidget {
+class RecordingScreen extends ConsumerStatefulWidget {
   const RecordingScreen({super.key, required this.activityId});
 
   final int activityId;
+
+  @override
+  ConsumerState<RecordingScreen> createState() => _RecordingScreenState();
+}
+
+class _RecordingScreenState extends ConsumerState<RecordingScreen> {
+  bool _controllersInitialized = false;
+  final _nameController = TextEditingController();
+  final _noteController = TextEditingController();
+  final _sportTypeController = TextEditingController();
+  final _nameFocus = FocusNode();
+  final _noteFocus = FocusNode();
+  final _sportTypeFocus = FocusNode();
+  List<String> _pastSportTypes = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPastSportTypes();
+    // FocusNodes let us save to DB when the user taps away (hasFocus → false).
+    _nameFocus.addListener(() {
+      if (!_nameFocus.hasFocus) _save(name: _nameController.text);
+    });
+    _noteFocus.addListener(() {
+      if (!_noteFocus.hasFocus) _save(note: _noteController.text);
+    });
+    _sportTypeFocus.addListener(() {
+      if (!_sportTypeFocus.hasFocus) _save(sportType: _sportTypeController.text);
+    });
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _noteController.dispose();
+    _sportTypeController.dispose();
+    _nameFocus.dispose();
+    _noteFocus.dispose();
+    _sportTypeFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPastSportTypes() async {
+    final types = await ref.read(databaseProvider).distinctSportTypes();
+    if (mounted) setState(() => _pastSportTypes = types);
+  }
+
+  void _save({String? name, String? note, String? sportType}) {
+    ref
+        .read(databaseProvider)
+        .updateActivity(
+          activityId: widget.activityId,
+          name: name,
+          note: note,
+          sportType: sportType,
+        );
+  }
 
   String _formatElapsed(Duration d) {
     final h = d.inHours;
@@ -56,7 +113,7 @@ class RecordingScreen extends ConsumerWidget {
     return message == null ? 'Signal missing for $age' : '$message; $age ago';
   }
 
-  Future<void> _onStop(BuildContext context, WidgetRef ref) async {
+  Future<void> _onStop(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -75,6 +132,7 @@ class RecordingScreen extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
+    final activityId = widget.activityId;
     await ref.read(recordingControllerProvider(activityId).notifier).stop();
     if (!context.mounted) return;
     ref.read(activeRecordingIdProvider.notifier).state = null;
@@ -82,10 +140,22 @@ class RecordingScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final activityId = widget.activityId;
     final state = ref.watch(recordingControllerProvider(activityId));
     final samples = ref.watch(samplesProvider(activityId)).valueOrNull ?? [];
     final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
+
+    // Prefill editable fields once the activity row is available; afterwards the
+    // controllers own the text so we don't clobber what the user is typing.
+    ref.watch(activityProvider(activityId)).whenData((a) {
+      if (!_controllersInitialized) {
+        _controllersInitialized = true;
+        _nameController.text = a.name ?? '';
+        _noteController.text = a.note ?? '';
+        _sportTypeController.text = a.sportType ?? '';
+      }
+    });
     final zoneSetup = zoneSetupFor(
       maxHr: athlete?.maxHeartrate,
       restingHr: athlete?.restingHeartrate,
@@ -111,7 +181,12 @@ class RecordingScreen extends ConsumerWidget {
         title: Text(state.deviceName),
         automaticallyImplyLeading: false,
       ),
-      body: LayoutBuilder(
+      // Tapping outside the text fields dismisses the sport-type autocomplete
+      // overlay and the keyboard by dropping focus.
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: LayoutBuilder(
         builder: (context, constraints) {
           final chartHeight = (constraints.maxHeight * 0.36).clamp(
             220.0,
@@ -187,7 +262,7 @@ class RecordingScreen extends ConsumerWidget {
                       FilledButton.tonalIcon(
                         onPressed: state.stopped
                             ? null
-                            : () => _onStop(context, ref),
+                            : () => _onStop(context),
                         icon: const Icon(Icons.stop_circle_outlined),
                         label: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -197,6 +272,8 @@ class RecordingScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 24),
+                      ..._buildEditableFields(context),
                     ],
                   ),
                 ),
@@ -205,7 +282,88 @@ class RecordingScreen extends ConsumerWidget {
           );
         },
       ),
+      ),
     );
+  }
+
+  List<Widget> _buildEditableFields(BuildContext context) {
+    final theme = Theme.of(context);
+    return [
+      TextField(
+        controller: _nameController,
+        focusNode: _nameFocus,
+        onSubmitted: (_) => _noteFocus.requestFocus(),
+        textInputAction: TextInputAction.next,
+        textCapitalization: TextCapitalization.sentences,
+        style: theme.textTheme.titleLarge,
+        textAlign: TextAlign.center,
+        decoration: const InputDecoration(
+          hintText: 'Add a name…',
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      TextField(
+        controller: _noteController,
+        focusNode: _noteFocus,
+        maxLines: null,
+        textInputAction: TextInputAction.done,
+        textCapitalization: TextCapitalization.sentences,
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        decoration: const InputDecoration(
+          hintText: 'Add a note…',
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      RawAutocomplete<String>(
+        textEditingController: _sportTypeController,
+        focusNode: _sportTypeFocus,
+        optionsBuilder: (_) => _pastSportTypes.take(5),
+        optionsViewBuilder: (context, onSelected, options) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: Material(
+              elevation: 4,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  shrinkWrap: true,
+                  children: [
+                    for (final sport in options)
+                      ListTile(
+                        title: Text(sport),
+                        onTap: () => onSelected(sport),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+          return TextField(
+            controller: controller,
+            focusNode: focusNode,
+            textInputAction: TextInputAction.done,
+            textCapitalization: TextCapitalization.sentences,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            decoration: const InputDecoration(
+              hintText: 'Sport type…',
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
+          );
+        },
+      ),
+    ];
   }
 }
 
