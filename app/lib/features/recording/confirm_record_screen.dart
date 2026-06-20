@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../app/colors.dart';
 import '../../core/app_logger.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
@@ -19,6 +18,25 @@ import '../../core/hr/native_bluetooth_hr_source.dart';
 import '../../core/hr/native_hr_scanner.dart';
 import '../../core/settings/app_settings.dart';
 
+/// A row in the device picker — either a scanned Bluetooth device or the
+/// simulated strap. Snapshotting the display fields here keeps the selected
+/// entry usable for committing even if it later drops out of scan results.
+class _Entry {
+  const _Entry({
+    required this.id,
+    required this.name,
+    this.rssi,
+    this.isKnown = false,
+    this.isFake = false,
+  });
+
+  final String id;
+  final String name;
+  final int? rssi;
+  final bool isKnown;
+  final bool isFake;
+}
+
 class ConfirmRecordScreen extends ConsumerStatefulWidget {
   const ConfirmRecordScreen({super.key});
 
@@ -30,35 +48,41 @@ class ConfirmRecordScreen extends ConsumerStatefulWidget {
 class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   static const _scanInterval = Duration(seconds: 3);
   static const _scanTimeout = Duration(seconds: 2);
-  static const _autoStartDelaySeconds = 5;
+  static const _fakeId = '__fake__';
 
   final _sportTypeController = TextEditingController();
   final _sportTypeFocus = FocusNode();
   List<String> _pastSportTypes = const [];
+
   HrScanner? _scanner;
   StreamSubscription<List<ScannedDevice>>? _scanResultsSub;
   Timer? _scanTimer;
-  Timer? _autoStartTimer;
-  List<ScannedDevice> _results = const [];
-  Device? _onlyKnownDevice;
-  Set<String> _knownPlatformIds = {};
-  ScannedDevice? _autoStartDevice;
-  String? _autoStartPlatformId;
-  int? _autoStartSecondsRemaining;
-  // Set when the user explicitly dismisses the countdown; prevents it from
-  // restarting on subsequent scan results within the same screen visit.
-  bool _autoStartDismissed = false;
   bool _scanning = false;
-  bool _connecting = false;
+
+  // Frozen display order of device ids; newcomers append to the bottom.
+  final List<String> _orderedIds = [];
+  final Map<String, ScannedDevice> _devicesById = {};
+  Set<String> _knownPlatformIds = {};
+  Device? _onlyKnownDevice;
+  // The known single device is auto-selected at most once per screen visit.
+  bool _autoSelectConsumed = false;
+
+  // The currently-selected entry holds a live preview connection (so the user
+  // can confirm sensor contact) that is handed straight to recording on Start.
+  _Entry? _selected;
+  HeartRateSource? _previewSource;
+  int? _previewBpm;
+  StreamSubscription<HrSample>? _previewSampleSub;
+  bool _connectingPreview = false;
+  // Start tapped while the preview is still connecting; honored once ready.
+  bool _startRequested = false;
+  // Committing the selected source to a new recording (full-screen spinner).
+  bool _starting = false;
   String? _error;
-  // Abstract over FBP (Android) and native (iOS) preview sources.
-  HeartRateSource? _monitorSource;
-  String? _monitoringPlatformId;
-  ScannedDevice? _monitorDevice;
-  int? _monitorBpm;
-  StreamSubscription<HrSample>? _monitorSampleSub;
 
   bool get _showFakeStrap => ref.watch(fakeHrDeviceEnabledProvider);
+
+  bool get _busy => _connectingPreview || _startRequested || _starting;
 
   // On iOS the native CoreBluetooth central handles scanning and preview, so
   // connecting for preview and then recording uses a single uninterrupted
@@ -71,19 +95,26 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     _prefillSportType();
     if (!kIsWeb) {
       _scanner = _useNative ? NativeHrScanner() : BluetoothHrScanner();
-      _scanResultsSub = _scanner!.results.listen(_handleScanResults);
-      _loadKnownDevices();
-      _startScan();
-      // Native scanner accumulates results continuously; periodic re-scan only
-      // needed for FlutterBluePlus which times out after each window.
-      if (!_useNative) {
-        _scanTimer = Timer.periodic(_scanInterval, (_) => _startScan());
-      }
+      _init();
+    }
+  }
+
+  // Load known devices before scanning so the first-paint ordering can put
+  // known devices first.
+  Future<void> _init() async {
+    await _loadKnownDevices();
+    if (!mounted) return;
+    _scanResultsSub = _scanner!.results.listen(_handleScanResults);
+    _startScan();
+    // Native scanner accumulates results continuously; periodic re-scan only
+    // needed for FlutterBluePlus which times out after each window.
+    if (!_useNative) {
+      _scanTimer = Timer.periodic(_scanInterval, (_) => _startScan());
     }
   }
 
   Future<void> _startScan() async {
-    if (_scanning || _connecting || _monitorSource != null) return;
+    if (_scanning || _busy || _selected != null) return;
     setState(() => _scanning = true);
     try {
       await _scanner?.start(timeout: _scanTimeout);
@@ -113,151 +144,183 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       _knownPlatformIds = {for (final d in allDevices) d.platformId};
       _onlyKnownDevice = allDevices.length == 1 ? allDevices.single : null;
     });
-    _maybeStartSingleDeviceCountdown(_results);
   }
 
   void _handleScanResults(List<ScannedDevice> results) {
     if (!mounted) return;
-    setState(() => _results = results);
-    if (_autoStartPlatformId != null &&
-        !results.any((d) => d.platformId == _autoStartPlatformId)) {
-      _cancelAutoStartCountdown();
-    }
-    _maybeStartSingleDeviceCountdown(results);
+    setState(() {
+      for (final d in results) {
+        _devicesById[d.platformId] = d;
+      }
+      // Append devices not seen yet this visit. The first population is sorted
+      // known-first/signal-second; after that, newcomers append in discovery
+      // order — the list never reshuffles under the user.
+      final newcomers = results
+          .where((d) => !_orderedIds.contains(d.platformId))
+          .toList();
+      if (_orderedIds.isEmpty) {
+        newcomers.sort((a, b) {
+          final aKnown = _knownPlatformIds.contains(a.platformId);
+          final bKnown = _knownPlatformIds.contains(b.platformId);
+          if (aKnown != bKnown) return aKnown ? -1 : 1;
+          return b.rssi.compareTo(a.rssi);
+        });
+      }
+      _orderedIds.addAll(newcomers.map((d) => d.platformId));
+    });
+    _maybeAutoSelect();
   }
 
-  void _maybeStartSingleDeviceCountdown(List<ScannedDevice> results) {
-    if (_connecting ||
-        _autoStartTimer != null ||
-        _autoStartPlatformId != null ||
-        _onlyKnownDevice == null ||
-        _monitorSource != null ||
-        _autoStartDismissed) {
+  void _maybeAutoSelect() {
+    if (_autoSelectConsumed || _selected != null || _onlyKnownDevice == null) {
       return;
     }
-    for (final device in results) {
-      if (device.platformId == _onlyKnownDevice!.platformId) {
-        _beginAutoStartCountdown(device);
-        return;
-      }
+    final device = _devicesById[_onlyKnownDevice!.platformId];
+    if (device == null) return;
+    _autoSelectConsumed = true;
+    _select(
+      _Entry(
+        id: device.platformId,
+        name: device.name,
+        rssi: device.rssi,
+        isKnown: true,
+      ),
+    );
+  }
+
+  Future<void> _disposePreview() async {
+    await _previewSampleSub?.cancel();
+    _previewSampleSub = null;
+    final source = _previewSource;
+    _previewSource = null;
+    await source?.dispose();
+  }
+
+  Future<void> _select(_Entry entry) async {
+    if (_starting) return;
+    // Any interaction consumes the one-shot auto-selection.
+    _autoSelectConsumed = true;
+    // Tapping the selected row again deselects it.
+    if (_selected?.id == entry.id) {
+      await _deselect();
+      return;
     }
-  }
 
-  void _beginAutoStartCountdown(ScannedDevice device) {
-    if (!mounted) return;
+    await _disposePreview();
     setState(() {
-      _autoStartDevice = device;
-      _autoStartPlatformId = device.platformId;
-      _autoStartSecondsRemaining = _autoStartDelaySeconds;
-    });
-    _autoStartTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      final remaining = _autoStartSecondsRemaining;
-      if (_connecting || remaining == null) {
-        timer.cancel();
-        return;
-      }
-      if (remaining <= 1) {
-        final device = _autoStartDevice;
-        _cancelAutoStartCountdown();
-        if (device != null) _onDeviceTap(device);
-        return;
-      }
-      setState(() => _autoStartSecondsRemaining = remaining - 1);
-    });
-  }
-
-  void _cancelAutoStartCountdown() {
-    _autoStartTimer?.cancel();
-    _autoStartTimer = null;
-    if (!mounted) return;
-    setState(() {
-      _autoStartDevice = null;
-      _autoStartPlatformId = null;
-      _autoStartSecondsRemaining = null;
-    });
-  }
-
-  void _dismissAutoStartCountdown() {
-    _cancelAutoStartCountdown();
-    _autoStartDismissed = true;
-  }
-
-  Future<void> _startMonitoring(ScannedDevice device) async {
-    if (_connecting) return;
-    _cancelAutoStartCountdown();
-    if (_monitorSource != null) await _stopMonitoring();
-    setState(() {
-      _connecting = true;
+      _selected = entry;
+      _previewBpm = null;
+      _connectingPreview = true;
+      _startRequested = false;
       _error = null;
     });
+    await _scanner?.stop();
     try {
-      await _scanner?.stop();
       final HeartRateSource source;
-      if (_useNative) {
+      if (entry.isFake) {
+        source = FakeHeartRateSource();
+      } else if (_useNative) {
         source = await NativeBluetoothHeartRateSource.start(
-          remoteId: device.platformId,
-          name: device.name,
+          remoteId: entry.id,
+          name: entry.name,
         );
       } else {
         source = await BluetoothHeartRateSource.connect(
-          device.platformId,
-          name: device.name,
+          entry.id,
+          name: entry.name,
         );
       }
-      if (!mounted) {
+      // The selection may have changed (or the screen closed) while connecting.
+      if (!mounted || _selected?.id != entry.id) {
         await source.dispose();
         return;
       }
       setState(() {
-        _monitorSource = source;
-        _monitoringPlatformId = device.platformId;
-        _monitorDevice = device;
-        _connecting = false;
+        _previewSource = source;
+        _connectingPreview = false;
       });
-      _monitorSampleSub = source.samples.listen((sample) {
+      _previewSampleSub = source.samples.listen((sample) {
         if (!mounted) return;
-        setState(() => _monitorBpm = sample.bpm);
+        setState(() => _previewBpm = sample.bpm);
       });
+      // Honor a Start that was tapped before the connection was ready.
+      if (_startRequested) {
+        _startRequested = false;
+        await _commitStart();
+      }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || _selected?.id != entry.id) return;
       setState(() {
         _error = 'Could not connect: $e';
-        _connecting = false;
+        _selected = null;
+        _connectingPreview = false;
+        _startRequested = false;
       });
       await _startScan();
     }
   }
 
-  Future<void> _stopMonitoring() async {
-    await _monitorSampleSub?.cancel();
-    _monitorSampleSub = null;
-    final source = _monitorSource;
-    _monitorSource = null;
-    await source?.dispose();
+  Future<void> _deselect() async {
+    await _disposePreview();
     if (!mounted) return;
     setState(() {
-      _monitoringPlatformId = null;
-      _monitorDevice = null;
-      _monitorBpm = null;
+      _selected = null;
+      _previewBpm = null;
+      _connectingPreview = false;
+      _startRequested = false;
     });
     _startScan();
   }
 
-  @override
-  void dispose() {
-    _scanTimer?.cancel();
-    _autoStartTimer?.cancel();
-    _scanResultsSub?.cancel();
-    _monitorSampleSub?.cancel();
-    _monitorSource?.dispose(); // fire-and-forget; dispose() can't await
-    _sportTypeController.dispose();
-    _sportTypeFocus.dispose();
-    _scanner?.dispose();
-    super.dispose();
+  void _onStart() {
+    final entry = _selected;
+    if (entry == null || _starting || _startRequested) return;
+    if (_connectingPreview || _previewSource == null) {
+      // Don't make the user wait for pairing — remember the intent and fire as
+      // soon as the preview connection is ready.
+      setState(() => _startRequested = true);
+      return;
+    }
+    _commitStart();
+  }
+
+  Future<void> _commitStart() async {
+    final entry = _selected;
+    final source = _previewSource;
+    if (entry == null || source == null) return;
+    setState(() {
+      _starting = true;
+      _error = null;
+    });
+    try {
+      // Do all the fallible prep while we still own the source, so a failure
+      // here leaves the live preview connection intact and Start retryable.
+      await _scanner?.stop();
+      final db = ref.read(databaseProvider);
+      if (!entry.isFake) {
+        await db.upsertDevice(platformId: entry.id, name: source.deviceName);
+      }
+      final athlete = await db.ensureDefaultAthlete();
+      final activityId = await _createActivity(athlete.id);
+      // Handoff: from here the recording controller owns the connection — no
+      // disconnect, no reconnect. Stop listening before relinquishing.
+      await _previewSampleSub?.cancel();
+      _previewSampleSub = null;
+      // If the screen is gone, keep ownership (dispose() will tear it down).
+      if (!mounted) return;
+      _previewSource = null;
+      ref.read(pendingHrSourceProvider.notifier).state = source;
+      ref.read(activeRecordingIdProvider.notifier).state = activityId;
+      context.go('/record/recording/$activityId');
+    } catch (e) {
+      if (!mounted) return;
+      // _previewSource is still held and connected; the user can press Start
+      // again without reconnecting.
+      setState(() {
+        _error = 'Could not start: $e';
+        _starting = false;
+      });
+    }
   }
 
   Future<int> _createActivity(int athleteId) async {
@@ -271,111 +334,16 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     );
   }
 
-  Future<void> _startWith(HeartRateSource source) async {
-    final db = ref.read(databaseProvider);
-    final athlete = await db.ensureDefaultAthlete();
-    final activityId = await _createActivity(athlete.id);
-    ref.read(pendingHrSourceProvider.notifier).state = source;
-    ref.read(activeRecordingIdProvider.notifier).state = activityId;
-    if (!mounted) return;
-    context.go('/record/recording/$activityId');
-  }
-
-  Future<void> _onSyntheticTap() async {
-    if (_connecting) return;
-    _cancelAutoStartCountdown();
-    if (_monitorSource != null) await _stopMonitoring();
-    setState(() => _connecting = true);
-    try {
-      await _startWith(FakeHeartRateSource());
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Could not start: $e';
-        _connecting = false;
-      });
-    }
-  }
-
-  Future<void> _onDeviceTap(ScannedDevice device) async {
-    if (_connecting) return;
-    _cancelAutoStartCountdown();
-
-    final name = _monitoringPlatformId == device.platformId &&
-            _monitorSource != null
-        ? _monitorSource!.deviceName
-        : device.name;
-
-    setState(() {
-      _connecting = true;
-      _error = null;
-    });
-
-    try {
-      // On iOS, if we're already monitoring this exact device, hand the live
-      // connection straight to the recording controller — no disconnect at all.
-      if (_useNative &&
-          _monitoringPlatformId == device.platformId &&
-          _monitorSource != null) {
-        final source = _monitorSource!;
-        _monitorSource = null; // transfer ownership; don't dispose
-        await _monitorSampleSub?.cancel();
-        _monitorSampleSub = null;
-        if (mounted) {
-          setState(() {
-            _monitoringPlatformId = null;
-            _monitorDevice = null;
-            _monitorBpm = null;
-          });
-        }
-        await _scanner?.stop();
-        await ref
-            .read(databaseProvider)
-            .upsertDevice(platformId: device.platformId, name: name);
-        await _startWith(source);
-        return;
-      }
-
-      // Otherwise: tear down any existing preview and start fresh.
-      await _monitorSampleSub?.cancel();
-      _monitorSampleSub = null;
-      final monitor = _monitorSource;
-      _monitorSource = null;
-      await monitor?.dispose();
-      await _scanner?.stop();
-      if (mounted) {
-        setState(() {
-          _monitoringPlatformId = null;
-          _monitorDevice = null;
-          _monitorBpm = null;
-        });
-      }
-
-      await ref
-          .read(databaseProvider)
-          .upsertDevice(platformId: device.platformId, name: name);
-
-      final HeartRateSource source;
-      if (_useNative) {
-        source = await NativeBluetoothHeartRateSource.start(
-          remoteId: device.platformId,
-          name: name,
-        );
-      } else {
-        source = await BluetoothHeartRateSource.connect(
-          device.platformId,
-          name: name,
-        );
-      }
-      await _startWith(source);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Could not connect: $e';
-        _connecting = false;
-      });
-      await _startScan();
-    }
+  @override
+  void dispose() {
+    _scanTimer?.cancel();
+    _scanResultsSub?.cancel();
+    _previewSampleSub?.cancel();
+    _previewSource?.dispose(); // fire-and-forget; dispose() can't await
+    _sportTypeController.dispose();
+    _sportTypeFocus.dispose();
+    _scanner?.dispose();
+    super.dispose();
   }
 
   @override
@@ -388,75 +356,101 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
         behavior: HitTestBehavior.opaque,
         onTap: () => FocusScope.of(context).unfocus(),
         child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          RawAutocomplete<String>(
-            textEditingController: _sportTypeController,
-            focusNode: _sportTypeFocus,
-            optionsBuilder: (_) => _pastSportTypes.take(5),
-            optionsViewBuilder: (context, onSelected, options) {
-              return Align(
-                alignment: Alignment.topLeft,
-                child: Material(
-                  elevation: 4,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    child: ListView(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      children: [
-                        for (final sport in options)
-                          ListTile(
-                            title: Text(sport),
-                            onTap: () => onSelected(sport),
-                          ),
-                      ],
-                    ),
-                  ),
+          padding: const EdgeInsets.all(16),
+          children: [
+            _buildSportTypeField(),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Start'),
+              onPressed: (_selected == null || _starting || _startRequested)
+                  ? null
+                  : _onStart,
+            ),
+            const SizedBox(height: 24),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
-              );
-            },
-            fieldViewBuilder:
-                (context, controller, focusNode, onFieldSubmitted) {
-                  return TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      labelText: 'Sport type (optional)',
-                      hintText: 'e.g. BJJ, Treadmill, Bike',
-                      border: OutlineInputBorder(),
-                    ),
-                  );
-                },
-          ),
-          const SizedBox(height: 24),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
-            ),
-          ..._buildDevicePicker(context),
-          if (_connecting)
-            const Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-        ],
+            ..._buildDevicePicker(context),
+            if (_starting || _startRequested)
+              const Padding(
+                padding: EdgeInsets.only(top: 16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+          ],
         ),
       ),
     );
   }
 
-  List<Widget> _buildDevicePicker(BuildContext context) {
-    // Monitored device stays pinned at top even when scanning has stopped.
-    final displayedResults = [
-      ?_monitorDevice,
-      ..._results.where((d) => d.platformId != _monitoringPlatformId),
+  Widget _buildSportTypeField() {
+    return RawAutocomplete<String>(
+      textEditingController: _sportTypeController,
+      focusNode: _sportTypeFocus,
+      optionsBuilder: (_) => _pastSportTypes.take(5),
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: ListView(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                children: [
+                  for (final sport in options)
+                    ListTile(
+                      title: Text(sport),
+                      onTap: () => onSelected(sport),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+            labelText: 'Sport type (optional)',
+            hintText: 'e.g. BJJ, Treadmill, Bike',
+            border: OutlineInputBorder(),
+          ),
+        );
+      },
+    );
+  }
+
+  List<_Entry> _displayedEntries() {
+    return [
+      if (_showFakeStrap)
+        const _Entry(
+          id: _fakeId,
+          name: 'Simulated Bluetooth strap',
+          isFake: true,
+        ),
+      for (final id in _orderedIds)
+        if (_devicesById[id] case final d?)
+          _Entry(
+            id: id,
+            name: d.name,
+            rssi: d.rssi,
+            isKnown: _knownPlatformIds.contains(id),
+          ),
     ];
+  }
+
+  List<Widget> _buildDevicePicker(BuildContext context) {
+    final entries = _displayedEntries();
 
     return [
       Row(
@@ -476,22 +470,12 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Scan again',
-              onPressed: (_connecting || _monitorSource != null)
-                  ? null
-                  : _startScan,
+              onPressed: (_busy || _selected != null) ? null : _startScan,
             ),
         ],
       ),
       const SizedBox(height: 8),
-      if (_showFakeStrap) ...[
-        _PickerCard(
-          title: 'Simulated Bluetooth strap',
-          isSimulated: true,
-          onTap: _connecting ? null : _onSyntheticTap,
-        ),
-        const SizedBox(height: 8),
-      ],
-      if (displayedResults.isEmpty && !_scanning)
+      if (entries.isEmpty && !_scanning)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 24),
           child: Text(
@@ -501,34 +485,26 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
           ),
         )
       else
-        ...displayedResults.map((device) {
-          final isKnown = _knownPlatformIds.contains(device.platformId);
-          final isMonitoring = _monitoringPlatformId == device.platformId;
-          final isCountingDown = _autoStartPlatformId == device.platformId;
-          // Non-monitored rows are stale while scanning is paused; dim them.
-          final stale = _monitorSource != null && !isMonitoring;
+        ...entries.map((entry) {
+          final isSelected = _selected?.id == entry.id;
+          // While a device is selected, scanning is paused, so the other rows
+          // are stale — dim them.
+          final stale = _selected != null && !isSelected;
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Opacity(
               opacity: stale ? 0.4 : 1.0,
               child: _PickerCard(
-                title: device.name,
-                rssi: device.rssi,
-                isKnown: isKnown,
-                countdownSeconds: isCountingDown
-                    ? _autoStartSecondsRemaining
-                    : null,
-                monitorBpm: isMonitoring ? _monitorBpm : null,
-                isMonitoring: isMonitoring,
-                onTap: _connecting ? null : () => _onDeviceTap(device),
-                onMonitor: _connecting
+                title: entry.name,
+                rssi: entry.rssi,
+                isKnown: entry.isKnown,
+                isFake: entry.isFake,
+                isSelected: isSelected,
+                connecting: isSelected && _connectingPreview,
+                bpm: isSelected ? _previewBpm : null,
+                onTap: (_starting || _startRequested)
                     ? null
-                    : (isMonitoring
-                          ? _stopMonitoring
-                          : () => _startMonitoring(device)),
-                onCountdownCancel: isCountingDown
-                    ? _dismissAutoStartCountdown
-                    : null,
+                    : () => _select(entry),
               ),
             ),
           );
@@ -542,109 +518,98 @@ class _PickerCard extends StatelessWidget {
     required this.title,
     this.rssi,
     this.isKnown = false,
-    this.isSimulated = false,
-    this.countdownSeconds,
-    this.monitorBpm,
-    this.isMonitoring = false,
+    this.isFake = false,
+    this.isSelected = false,
+    this.connecting = false,
+    this.bpm,
     required this.onTap,
-    this.onMonitor,
-    this.onCountdownCancel,
   });
 
   final String title;
   final int? rssi;
   final bool isKnown;
-  final bool isSimulated;
-  final int? countdownSeconds;
-  final int? monitorBpm;
-  final bool isMonitoring;
+  final bool isFake;
+  final bool isSelected;
+  final bool connecting;
+  final int? bpm;
   final VoidCallback? onTap;
-  final VoidCallback? onMonitor;
-  final VoidCallback? onCountdownCancel;
 
   @override
   Widget build(BuildContext context) {
-    final isCounting = countdownSeconds != null;
-    final iconColor = isSimulated
-        ? null
-        : countdownSeconds != null
-        ? AppColors
-              .zoneMax // Z5 pink  — auto-starting
-        : isKnown
-        ? AppColors
-              .zoneHard // Z4 orange — recognised device
-        : AppColors.zoneBaseline; // grey — first-time device
+    final scheme = Theme.of(context).colorScheme;
+
+    final IconData iconData;
+    if (isFake) {
+      iconData = Icons.bug_report_outlined;
+    } else if (isKnown) {
+      iconData = Icons.favorite;
+    } else {
+      iconData = Icons.favorite_border;
+    }
 
     Widget subtitle;
-    if (isSimulated) {
+    if (isSelected) {
       subtitle = Text(
-        'Debug heart-rate stream',
+        connecting || bpm == null ? 'Connecting…' : '$bpm BPM',
         style: Theme.of(context).textTheme.bodyMedium,
       );
-    } else if (isMonitoring) {
-      final bpm = monitorBpm;
+    } else if (isFake) {
       subtitle = Text(
-        bpm != null ? '$bpm BPM' : 'Connecting…',
+        'Debug heart-rate stream',
         style: Theme.of(context).textTheme.bodyMedium,
       );
     } else {
       subtitle = _SignalBars(rssi: rssi ?? -90);
     }
 
+    // Recognition is shown by icon shape + "Last used", never by zone color.
+    final Widget? trailing;
+    if (isSelected) {
+      trailing = Icon(Icons.check_circle, color: scheme.primary);
+    } else if (isKnown) {
+      trailing = Text(
+        'Last used',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+      );
+    } else {
+      trailing = null;
+    }
+
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Icon(
-              isSimulated ? Icons.bug_report_outlined : Icons.favorite,
-              color: iconColor,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  subtitle,
-                ],
+      color: isSelected ? scheme.primaryContainer : null,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Icon(
+                iconData,
+                color: isSelected ? scheme.primary : scheme.onSurfaceVariant,
               ),
-            ),
-            const SizedBox(width: 12),
-            if (isCounting) ...[
-              // Tap to cancel the countdown; separate Start to fire immediately.
-              IconButton(
-                icon: const Icon(Icons.pause),
-                tooltip: 'Cancel auto-start',
-                onPressed: onCountdownCancel,
-              ),
-              FilledButton.icon(
-                icon: Text(
-                  '$countdownSeconds',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    subtitle,
+                  ],
                 ),
-                label: const Icon(Icons.play_arrow, size: 18),
-                onPressed: onTap,
               ),
-            ] else ...[
-              if (!isSimulated)
-                IconButton(
-                  icon: Icon(
-                    isMonitoring
-                        ? Icons.stop_circle_outlined
-                        : Icons.visibility_outlined,
-                  ),
-                  tooltip: isMonitoring ? 'Stop monitoring' : 'Monitor HR',
-                  onPressed: onMonitor,
-                ),
-              FilledButton.icon(
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Start'),
-                onPressed: onTap,
-              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 12),
+                trailing,
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

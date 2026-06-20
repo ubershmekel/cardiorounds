@@ -34,53 +34,82 @@ At the bottom there is a floating nav bar with:
 
 This screen handles Bluetooth HR device connection before recording starts.
 
-A sport-type field is shown at the top (free text, pre-filled with the most
-recently used sport type, with autocomplete from past sport types). The user can
-change it here; it can also be changed on the activity review screen after the
-workout.
+### Layout
+
+Two things sit at the top, above the device list:
+
+- A **sport-type field** (free text, pre-filled with the most recently used
+  sport type, with autocomplete from past sport types). The user can change it
+  here; it can also be changed on the activity review screen after the workout.
+- A single primary **Start** button. It is disabled while no device is selected
+  and becomes active the moment one is. There is no per-device Start button.
+
+The device list below is a **selector**, not a launcher: tapping a row picks
+that device; the Start button at the top commits to it.
 
 ### Device list
 
 Shows a scrollable list of nearby Bluetooth HR devices found by continuous
-background scanning (2 s scan, 1 s gap, repeat). Each device card shows:
+background scanning. Each row shows:
 
-- A **colored heart icon** indicating recognition status:
-  - Grey — never seen before
-  - Orange (Z4) — previously connected
-  - Pink (Z5) — the auto-starting device (countdown active)
+- A **heart icon** — filled for a previously-used device, outline for one never
+  seen before. Recognition is conveyed by the icon shape and a **"Last used"**
+  label, not by color. Zone colors are reserved for actual heart rate and are
+  never used here.
 - **Device name**
 - **Signal-strength bars** (1–4 bars; ≥ −60 dBm = 4, ≥ −70 = 3, ≥ −80 = 2, < −80
-  = 1)
-- An **eye button** (👁) to enter monitor mode (see below)
-- A **Start button** to connect and begin recording immediately
+  = 1), shown when the row is not selected.
 
-### Auto-start countdown
+When the "Fake heart-rate device" toggle is on (Advanced settings), a
+**simulated strap** appears as the first row in this same list and behaves like
+any other selectable device.
+
+#### Ordering (stable, never reshuffles)
+
+A list that reorders under your thumb is hard to tap, so order is fixed once and
+left alone:
+
+- The list is sorted **once** as it first populates: known devices first, then
+  by signal strength.
+- After that, **positions are frozen**. Signal changes update the bars in place
+  but never reorder a row.
+- **Newly discovered devices append to the bottom** in discovery order — even a
+  known strap that shows up late lands at the bottom rather than jumping up.
+- The **selected device keeps its slot**; selecting it does not move it.
+
+### Selection and live preview
+
+Tapping a row selects it, which immediately connects to that device and streams
+live BPM in place of the signal bars — without creating an activity. This lets
+the user confirm sensor contact before committing. While a device is selected:
+
+- Scanning pauses; the other (now stale) rows are greyed out.
+- Tapping the **selected row again** deselects it, disconnects, and resumes
+  scanning.
+- Tapping a **different row** switches the selection to that device.
+
+The top **Start** button is enabled as soon as a device is selected — it does
+**not** wait for pairing or a first reading. Tapping it reuses the already-open
+connection (no reconnect) and hands it straight to the recording screen, which
+owns the connecting / reconnecting display. If Start is tapped before the
+preview connection finishes, the start is honored as soon as the connection is
+ready.
+
+### Auto-selection of a known device
 
 If exactly one device is known from a prior session and it appears in the scan,
-a 5-second countdown begins automatically. During the countdown:
-
-- The heart icon turns pink (Z5)
-- A **pause button** cancels the countdown without leaving the screen
-- The **Start button** fires the connection immediately
-
-If the device disappears from scan during the countdown, the countdown cancels.
-
-### Monitor mode (HR preview without recording)
-
-Tapping the eye button on a device card connects to that device and streams live
-BPM in place of the signal bars — without creating an activity. This lets the
-user verify sensor contact before starting. While monitoring:
-
-- Scanning pauses (the non-monitored devices are greyed out)
-- Tapping **Start** reuses the already-open BT connection (no reconnect)
-- Tapping the **stop button** (⏹) disconnects and resumes scanning
+it is **auto-selected** (its live preview starts) — but recording never starts
+on its own. There is no countdown and no deadline; the user taps Start when
+ready. Auto-selection happens at most once per screen visit and not after the
+user has interacted with the list.
 
 ### States shown on this screen
 
 - Scanning — spinner next to section header; refresh button when idle
-- Countdown — pink icon, pause button, countdown number
-- Monitoring — live BPM, stop button, Start button
-- Connecting / starting — full-screen spinner; buttons disabled
+- Selected / previewing — live BPM on the selected row, other rows greyed out
+- Connecting preview — "Connecting…" on the selected row
+- Starting — full-screen spinner while the activity is created; controls
+  disabled
 - Error — red message above the list; scanning resumes
 - No devices found — instructional text with retry button
 - Bluetooth off — handled at the OS level before this screen is reached
