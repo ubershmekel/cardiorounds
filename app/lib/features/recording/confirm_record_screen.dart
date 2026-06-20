@@ -381,7 +381,12 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Start recording')),
-      body: ListView(
+      // Tapping outside the sport-type field dismisses its autocomplete overlay
+      // and the keyboard by dropping focus.
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           RawAutocomplete<String>(
@@ -415,6 +420,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
                   return TextField(
                     controller: controller,
                     focusNode: focusNode,
+                    textCapitalization: TextCapitalization.sentences,
                     decoration: const InputDecoration(
                       labelText: 'Sport type (optional)',
                       hintText: 'e.g. BJJ, Treadmill, Bike',
@@ -439,6 +445,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
               child: Center(child: CircularProgressIndicator()),
             ),
         ],
+        ),
       ),
     );
   }

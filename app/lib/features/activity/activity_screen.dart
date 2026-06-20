@@ -117,7 +117,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
           ),
         ],
       ),
-      body: activity.when(
+      // Tapping outside the text fields dismisses the sport-type autocomplete
+      // overlay and the keyboard by dropping focus.
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: activity.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Failed to load activity: $e')),
         data: (a) => samples.when(
@@ -175,6 +180,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             },
           ),
         ),
+      ),
       ),
     );
   }
@@ -342,6 +348,7 @@ class _ActivityBody extends StatelessWidget {
                 controller: nameController,
                 focusNode: nameFocusNode,
                 onSubmitted: onNameSubmitted,
+                textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.next,
                 style: theme.textTheme.titleLarge,
                 decoration: InputDecoration(
@@ -354,6 +361,7 @@ class _ActivityBody extends StatelessWidget {
                 controller: noteController,
                 focusNode: noteFocusNode,
                 maxLines: null,
+                textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.done,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
@@ -395,6 +403,7 @@ class _ActivityBody extends StatelessWidget {
                       return TextField(
                         controller: controller,
                         focusNode: focusNode,
+                        textCapitalization: TextCapitalization.sentences,
                         textInputAction: TextInputAction.done,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
