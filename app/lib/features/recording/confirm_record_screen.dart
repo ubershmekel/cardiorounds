@@ -13,6 +13,7 @@ import '../../core/hr/hr_providers.dart';
 import '../../core/hr/hr_scanner.dart';
 import '../../core/hr/hr_source.dart';
 import '../../core/settings/app_settings.dart';
+import 'sport_type_options.dart';
 
 /// A row in the device picker — either a scanned Bluetooth device or the
 /// simulated strap. Snapshotting the display fields here keeps the selected
@@ -189,6 +190,8 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
 
   Future<void> _select(_Entry entry) async {
     if (_starting) return;
+    // Selecting a device should also dismiss the sport-type keyboard/overlay.
+    FocusScope.of(context).unfocus();
     // Any interaction consumes the one-shot auto-selection.
     _autoSelectConsumed = true;
     // Tapping the selected row again deselects it.
@@ -329,7 +332,13 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Start recording')),
+      appBar: AppBar(
+        // Tapping the title is an easy spot to dismiss the keyboard/overlay.
+        title: GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: const Text('Start recording'),
+        ),
+      ),
       // Tapping outside the sport-type field dismisses its autocomplete overlay
       // and the keyboard by dropping focus.
       body: GestureDetector(
@@ -337,9 +346,11 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
         onTap: () => FocusScope.of(context).unfocus(),
         child: ListView(
           padding: const EdgeInsets.all(16),
+          // Dragging the list also dismisses the keyboard/overlay.
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           children: [
-            _buildSportTypeField(),
-            const SizedBox(height: 16),
+            // Start sits above the sport-type field so the autocomplete overlay
+            // (which drops down) can never cover it.
             FilledButton.icon(
               icon: const Icon(Icons.play_arrow),
               label: const Text('Start'),
@@ -347,6 +358,8 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
                   ? null
                   : _onStart,
             ),
+            const SizedBox(height: 16),
+            _buildSportTypeField(),
             const SizedBox(height: 24),
             if (_error != null)
               Padding(
@@ -373,28 +386,8 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       textEditingController: _sportTypeController,
       focusNode: _sportTypeFocus,
       optionsBuilder: (_) => _pastSportTypes.take(5),
-      optionsViewBuilder: (context, onSelected, options) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 4,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 200),
-              child: ListView(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                children: [
-                  for (final sport in options)
-                    ListTile(
-                      title: Text(sport),
-                      onTap: () => onSelected(sport),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+      optionsViewBuilder: (context, onSelected, options) =>
+          SportTypeOptions(options: options, onSelected: onSelected),
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
         return TextField(
           controller: controller,

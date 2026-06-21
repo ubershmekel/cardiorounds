@@ -11,6 +11,7 @@ import '../activity/hr_stats.dart';
 import '../activity/hr_stats_row.dart';
 import '../activity/zone_breakdown.dart';
 import 'recording_controller.dart';
+import 'sport_type_options.dart';
 
 const int _liveWindowMs = 15 * 60 * 1000;
 
@@ -322,29 +323,15 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       RawAutocomplete<String>(
         textEditingController: _sportTypeController,
         focusNode: _sportTypeFocus,
+        // This field sits at the bottom of the scroll view; open the overlay
+        // upward so the keyboard doesn't squash or hide it.
+        optionsViewOpenDirection: OptionsViewOpenDirection.up,
         optionsBuilder: (_) => _pastSportTypes.take(5),
-        optionsViewBuilder: (context, onSelected, options) {
-          return Align(
-            alignment: Alignment.topCenter,
-            child: Material(
-              elevation: 4,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 200),
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  shrinkWrap: true,
-                  children: [
-                    for (final sport in options)
-                      ListTile(
-                        title: Text(sport),
-                        onTap: () => onSelected(sport),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
+        optionsViewBuilder: (context, onSelected, options) => SportTypeOptions(
+          options: options,
+          onSelected: onSelected,
+          alignment: Alignment.bottomCenter,
+        ),
         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
           return TextField(
             controller: controller,
