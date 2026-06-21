@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -9,13 +8,10 @@ import 'package:go_router/go_router.dart';
 import '../../core/app_logger.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
-import '../../core/hr/bluetooth_hr_scanner.dart';
-import '../../core/hr/bluetooth_hr_source.dart';
 import '../../core/hr/fake_hr_source.dart';
+import '../../core/hr/hr_providers.dart';
 import '../../core/hr/hr_scanner.dart';
 import '../../core/hr/hr_source.dart';
-import '../../core/hr/native_bluetooth_hr_source.dart';
-import '../../core/hr/native_hr_scanner.dart';
 import '../../core/settings/app_settings.dart';
 
 /// A row in the device picker — either a scanned Bluetooth device or the
@@ -84,17 +80,12 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
 
   bool get _busy => _connectingPreview || _startRequested || _starting;
 
-  // On iOS the native CoreBluetooth central handles scanning and preview, so
-  // connecting for preview and then recording uses a single uninterrupted
-  // connection. On Android we stay on FlutterBluePlus throughout.
-  bool get _useNative => !kIsWeb && Platform.isIOS;
-
   @override
   void initState() {
     super.initState();
     _prefillSportType();
     if (!kIsWeb) {
-      _scanner = _useNative ? NativeHrScanner() : BluetoothHrScanner();
+      _scanner = ref.read(hrScannerFactoryProvider)();
       _init();
     }
   }
@@ -108,7 +99,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     _startScan();
     // Native scanner accumulates results continuously; periodic re-scan only
     // needed for FlutterBluePlus which times out after each window.
-    if (!_useNative) {
+    if (!useNativeBluetooth) {
       _scanTimer = Timer.periodic(_scanInterval, (_) => _startScan());
     }
   }
@@ -216,20 +207,9 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     });
     await _scanner?.stop();
     try {
-      final HeartRateSource source;
-      if (entry.isFake) {
-        source = FakeHeartRateSource();
-      } else if (_useNative) {
-        source = await NativeBluetoothHeartRateSource.start(
-          remoteId: entry.id,
-          name: entry.name,
-        );
-      } else {
-        source = await BluetoothHeartRateSource.connect(
-          entry.id,
-          name: entry.name,
-        );
-      }
+      final source = entry.isFake
+          ? FakeHeartRateSource()
+          : await ref.read(hrConnectorProvider)(entry.id, entry.name);
       // The selection may have changed (or the screen closed) while connecting.
       if (!mounted || _selected?.id != entry.id) {
         await source.dispose();

@@ -46,13 +46,15 @@ tasks:
     desc: Run all tests (excludes review-only preview image tests)
     dir: app
     cmds:
-      - flutter test -r expanded -x preview
+      # github reporter: one "✅ <name>" line per test, no per-frame churn.
+      - flutter test -r github -x preview
   previews:
     desc:
-      Regenerate review-only preview images (e.g. HR chart) under test/previews/
+      Regenerate review-only preview images (e.g. HR chart) under
+      app/test/previews/
     dir: app
     cmds:
-      - flutter test -t preview --update-goldens
+      - flutter test -r github -t preview --update-goldens
   format:
     desc: Format Dart code and Prettier-supported project files
     cmds:
