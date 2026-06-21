@@ -46,7 +46,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       if (!_noteFocus.hasFocus) _save(note: _noteController.text);
     });
     _sportTypeFocus.addListener(() {
-      if (!_sportTypeFocus.hasFocus) _save(sportType: _sportTypeController.text);
+      if (!_sportTypeFocus.hasFocus)
+        _save(sportType: _sportTypeController.text);
     });
   }
 
@@ -182,12 +183,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         title: Text(state.deviceName),
         automaticallyImplyLeading: false,
       ),
-      // Tapping outside the text fields dismisses the sport-type autocomplete
-      // overlay and the keyboard by dropping focus.
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: LayoutBuilder(
+      body: LayoutBuilder(
         builder: (context, constraints) {
           final chartHeight = (constraints.maxHeight * 0.36).clamp(
             220.0,
@@ -283,7 +279,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
           );
         },
       ),
-      ),
     );
   }
 
@@ -293,6 +288,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       TextField(
         controller: _nameController,
         focusNode: _nameFocus,
+        onTapOutside: (_) => _nameFocus.unfocus(),
         onSubmitted: (_) => _noteFocus.requestFocus(),
         textInputAction: TextInputAction.next,
         textCapitalization: TextCapitalization.sentences,
@@ -307,6 +303,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       TextField(
         controller: _noteController,
         focusNode: _noteFocus,
+        onTapOutside: (_) => _noteFocus.unfocus(),
         maxLines: null,
         textInputAction: TextInputAction.done,
         textCapitalization: TextCapitalization.sentences,
@@ -327,25 +324,33 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         // upward so the keyboard doesn't squash or hide it.
         optionsViewOpenDirection: OptionsViewOpenDirection.up,
         optionsBuilder: (_) => _pastSportTypes.take(5),
-        optionsViewBuilder: (context, onSelected, options) => SportTypeOptions(
-          options: options,
-          onSelected: onSelected,
-          alignment: Alignment.bottomCenter,
+        optionsViewBuilder: (context, onSelected, options) => TapRegion(
+          groupId: _sportTypeFocus,
+          child: SportTypeOptions(
+            options: options,
+            onSelected: onSelected,
+            alignment: Alignment.bottomCenter,
+          ),
         ),
         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-          return TextField(
-            controller: controller,
-            focusNode: focusNode,
-            textInputAction: TextInputAction.done,
-            textCapitalization: TextCapitalization.sentences,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            decoration: const InputDecoration(
-              hintText: 'Sport type…',
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
+          // Grouped with the overlay above so a tap outside both drops focus.
+          return TapRegion(
+            groupId: _sportTypeFocus,
+            onTapOutside: (_) => focusNode.unfocus(),
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              textInputAction: TextInputAction.done,
+              textCapitalization: TextCapitalization.sentences,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              decoration: const InputDecoration(
+                hintText: 'Sport type…',
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+              ),
             ),
           );
         },

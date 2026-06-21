@@ -332,51 +332,39 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        // Tapping the title is an easy spot to dismiss the keyboard/overlay.
-        title: GestureDetector(
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: const Text('Start recording'),
-        ),
-      ),
-      // Tapping outside the sport-type field dismisses its autocomplete overlay
-      // and the keyboard by dropping focus.
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          // Dragging the list also dismisses the keyboard/overlay.
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          children: [
-            // Start sits above the sport-type field so the autocomplete overlay
-            // (which drops down) can never cover it.
-            FilledButton.icon(
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Start'),
-              onPressed: (_selected == null || _starting || _startRequested)
-                  ? null
-                  : _onStart,
+      appBar: AppBar(title: const Text('Start recording')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        // Dragging the list also dismisses the keyboard/overlay.
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        children: [
+          // Start sits above the sport-type field so the autocomplete overlay
+          // (which drops down) can never cover it.
+          FilledButton.icon(
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Start'),
+            onPressed: (_selected == null || _starting || _startRequested)
+                ? null
+                : _onStart,
+          ),
+          const SizedBox(height: 16),
+          _buildSportTypeField(),
+          const SizedBox(height: 24),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ),
-            const SizedBox(height: 16),
-            _buildSportTypeField(),
-            const SizedBox(height: 24),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            ..._buildDevicePicker(context),
-            if (_starting || _startRequested)
-              const Padding(
-                padding: EdgeInsets.only(top: 16),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-          ],
-        ),
+          ..._buildDevicePicker(context),
+          if (_starting || _startRequested)
+            const Padding(
+              padding: EdgeInsets.only(top: 16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+        ],
       ),
     );
   }
@@ -386,17 +374,24 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       textEditingController: _sportTypeController,
       focusNode: _sportTypeFocus,
       optionsBuilder: (_) => _pastSportTypes.take(5),
-      optionsViewBuilder: (context, onSelected, options) =>
-          SportTypeOptions(options: options, onSelected: onSelected),
+      optionsViewBuilder: (context, onSelected, options) => TapRegion(
+        groupId: _sportTypeFocus,
+        child: SportTypeOptions(options: options, onSelected: onSelected),
+      ),
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-        return TextField(
-          controller: controller,
-          focusNode: focusNode,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(
-            labelText: 'Sport type (optional)',
-            hintText: 'e.g. BJJ, Treadmill, Bike',
-            border: OutlineInputBorder(),
+        // Grouped with the overlay above so a tap outside both drops focus.
+        return TapRegion(
+          groupId: _sportTypeFocus,
+          onTapOutside: (_) => focusNode.unfocus(),
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Sport type (optional)',
+              hintText: 'e.g. BJJ, Treadmill, Bike',
+              border: OutlineInputBorder(),
+            ),
           ),
         );
       },
@@ -542,9 +537,9 @@ class _PickerCard extends StatelessWidget {
     } else if (isKnown) {
       trailing = Text(
         'Last used',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-        ),
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
       );
     } else {
       trailing = null;
@@ -568,19 +563,13 @@ class _PickerCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    Text(title, style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 4),
                     subtitle,
                   ],
                 ),
               ),
-              if (trailing != null) ...[
-                const SizedBox(width: 12),
-                trailing,
-              ],
+              if (trailing != null) ...[const SizedBox(width: 12), trailing],
             ],
           ),
         ),

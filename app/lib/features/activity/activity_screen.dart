@@ -6,6 +6,7 @@ import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 import '../../core/zones/zone_times.dart';
 import '../../core/zones/zones.dart';
+import '../recording/sport_type_options.dart';
 import 'activity_duration.dart';
 import 'hr_chart.dart';
 import 'hr_stats.dart';
@@ -117,12 +118,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
           ),
         ],
       ),
-      // Tapping outside the text fields dismisses the sport-type autocomplete
-      // overlay and the keyboard by dropping focus.
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: activity.when(
+      body: activity.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Failed to load activity: $e')),
         data: (a) => samples.when(
@@ -180,7 +176,6 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             },
           ),
         ),
-      ),
       ),
     );
   }
@@ -347,6 +342,7 @@ class _ActivityBody extends StatelessWidget {
               TextField(
                 controller: nameController,
                 focusNode: nameFocusNode,
+                onTapOutside: (_) => nameFocusNode.unfocus(),
                 onSubmitted: onNameSubmitted,
                 textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.next,
@@ -360,6 +356,7 @@ class _ActivityBody extends StatelessWidget {
               TextField(
                 controller: noteController,
                 focusNode: noteFocusNode,
+                onTapOutside: (_) => noteFocusNode.unfocus(),
                 maxLines: null,
                 textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.done,
@@ -376,42 +373,33 @@ class _ActivityBody extends StatelessWidget {
                 textEditingController: sportTypeController,
                 focusNode: sportTypeFocusNode,
                 optionsBuilder: (_) => pastSportTypes.take(5),
-                optionsViewBuilder: (context, onSelected, options) {
-                  return Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      elevation: 4,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 200),
-                        child: ListView(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          children: [
-                            for (final sport in options)
-                              ListTile(
-                                title: Text(sport),
-                                onTap: () => onSelected(sport),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
+                optionsViewBuilder: (context, onSelected, options) => TapRegion(
+                  groupId: sportTypeFocusNode,
+                  child: SportTypeOptions(
+                    options: options,
+                    onSelected: onSelected,
+                  ),
+                ),
                 fieldViewBuilder:
                     (context, controller, focusNode, onFieldSubmitted) {
-                      return TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        textCapitalization: TextCapitalization.sentences,
-                        textInputAction: TextInputAction.done,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        decoration: const InputDecoration(
-                          hintText: 'Sport type…',
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
+                      // Grouped with the overlay above so a tap outside both
+                      // drops focus.
+                      return TapRegion(
+                        groupId: sportTypeFocusNode,
+                        onTapOutside: (_) => focusNode.unfocus(),
+                        child: TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          textCapitalization: TextCapitalization.sentences,
+                          textInputAction: TextInputAction.done,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Sport type…',
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                          ),
                         ),
                       );
                     },

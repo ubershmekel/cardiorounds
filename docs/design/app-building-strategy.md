@@ -62,6 +62,45 @@ main tabs (Home, Record, Settings). Key rules:
 
 ---
 
+## Flutter Best Practices
+
+### Dismissing focus / overlays on an outside tap
+
+To make "tap anywhere outside this field to dismiss the keyboard and any
+autocomplete overlay" work, use Flutter's `TapRegion` / `TextField.onTapOutside`
+— **not** screen-spanning `GestureDetector`s.
+
+- **Plain text fields:** set `onTapOutside: (_) => focusNode.unfocus()` directly
+  on the `TextField`. By default Material keeps focus on mobile when you tap
+  away, which is why this is needed.
+- **A field with a popup (e.g. `RawAutocomplete`):** wrap _both_ the field and
+  its overlay (`optionsViewBuilder`) in `TapRegion`s that share the same
+  `groupId` (the field's `FocusNode` works well). Put `onTapOutside: unfocus` on
+  the field's region. `onTapOutside` then fires only when a tap misses _every_
+  member of the group, so tapping an option still selects it instead of
+  dismissing first.
+
+Why not a single high-level `GestureDetector`?
+
+- It can't cleanly cover the `AppBar` (a separate Scaffold slot), so taps there
+  silently fail to dismiss.
+- An opaque detector competes with the overlay's own taps, and the overlay lives
+  in a separate `OverlayEntry` (not inside the body subtree), which reintroduces
+  the "tapping an option closes it before it registers" race.
+
+`TapRegion` works at the app root (via the surface the Navigator installs), so
+membership is by `groupId`, not tree position — both problems disappear and the
+per-field detectors go away.
+
+### Share UI building blocks, don't re-roll them
+
+When the same UI element appears on more than one screen (e.g. the sport-type
+autocomplete dropdown), extract one widget (`SportTypeOptions`) and reuse it.
+Re-rolling the same overlay inline on each screen drifts in look and behavior
+over time.
+
+---
+
 ## Repo Layout
 
 The Flutter project lives in `app/`, not at the repo root. This keeps `docs/`,
