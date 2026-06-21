@@ -67,8 +67,7 @@ class FakeSource implements HeartRateSource {
     await _status.close();
   }
 
-  void emitBpm(int bpm) =>
-      _samples.add(HrSample(bpm: bpm, at: DateTime.now()));
+  void emitBpm(int bpm) => _samples.add(HrSample(bpm: bpm, at: DateTime.now()));
 }
 
 /// Database that fails when starting an activity, to exercise the
@@ -185,7 +184,9 @@ void main() {
 
     // Start is disabled until a device is selected.
     expect(
-      tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Start')).onPressed,
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Start'))
+          .onPressed,
       isNull,
     );
 
@@ -380,7 +381,10 @@ void main() {
     await settle(tester);
 
     expect(connectCalls, 1); // auto-selected -> preview connected
-    expect(find.textContaining('recording-'), findsNothing); // never auto-starts
+    expect(
+      find.textContaining('recording-'),
+      findsNothing,
+    ); // never auto-starts
     expect(container.read(activeRecordingIdProvider), isNull);
     expect(connected.disposed, isFalse);
 

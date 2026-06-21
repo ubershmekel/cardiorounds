@@ -36,17 +36,18 @@ class NativeHrScanner implements HrScanner {
     try {
       final raw = await _channel.invokeListMethod<Object>('scanDrain');
       if (raw == null || _results.isClosed) return;
-      final devices = raw
-          .cast<Map>()
-          .map(
-            (m) => ScannedDevice(
-              platformId: m['id'] as String,
-              name: (m['name'] as String?) ?? '',
-              rssi: (m['rssi'] as num).toInt(),
-            ),
-          )
-          .toList()
-        ..sort((a, b) => b.rssi.compareTo(a.rssi));
+      final devices =
+          raw
+              .cast<Map>()
+              .map(
+                (m) => ScannedDevice(
+                  platformId: m['id'] as String,
+                  name: (m['name'] as String?) ?? '',
+                  rssi: (m['rssi'] as num).toInt(),
+                ),
+              )
+              .toList()
+            ..sort((a, b) => b.rssi.compareTo(a.rssi));
       _results.add(devices);
     } catch (e) {
       appLog('NativeScan', 'Poll error: $e');

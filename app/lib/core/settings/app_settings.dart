@@ -23,10 +23,11 @@ class FakeHrDeviceNotifier extends Notifier<bool> {
 
   Future<void> set(bool enabled) async {
     state = enabled;
-    await ref.read(sharedPreferencesProvider).setBool(_fakeHrDeviceKey, enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool(_fakeHrDeviceKey, enabled);
   }
 }
 
-final fakeHrDeviceEnabledProvider = NotifierProvider<FakeHrDeviceNotifier, bool>(
-  FakeHrDeviceNotifier.new,
-);
+final fakeHrDeviceEnabledProvider =
+    NotifierProvider<FakeHrDeviceNotifier, bool>(FakeHrDeviceNotifier.new);
