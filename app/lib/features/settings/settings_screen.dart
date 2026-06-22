@@ -149,7 +149,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
             border: OutlineInputBorder(),
             suffixIcon: Tooltip(
               message:
-                  'Used for zone thresholds. Estimate: 220 minus your age; measure with a hard interval session for accuracy.',
+                  'Used for zone thresholds. Estimate: 220 minus your age; or measure with an increasingly hard interval session for accuracy.',
               child: Icon(Icons.help_outline),
             ),
           ),
