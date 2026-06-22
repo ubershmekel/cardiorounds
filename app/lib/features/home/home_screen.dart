@@ -106,13 +106,14 @@ class _HeroCard extends StatelessWidget {
   }
 }
 
-class _ActivityList extends StatelessWidget {
+class _ActivityList extends ConsumerWidget {
   const _ActivityList({required this.list});
 
   final List<Activity> list;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isRecording = ref.watch(activeRecordingIdProvider) != null;
     return Column(
       children: [
         Padding(
@@ -121,7 +122,8 @@ class _ActivityList extends StatelessWidget {
             width: double.infinity,
             child: FilledButton.icon(
               icon: const Icon(Icons.fiber_manual_record),
-              label: const Text('Start recording'),
+              label: Text(isRecording ? 'Recording' : 'Start recording'),
+              // /record redirects to the live screen if a recording is active.
               onPressed: () => context.go('/record'),
             ),
           ),

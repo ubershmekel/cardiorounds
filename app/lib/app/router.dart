@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/db/providers.dart';
 import '../features/activity/activity_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/recording/confirm_record_screen.dart';
 import '../features/recording/recording_screen.dart';
 import '../features/settings/settings_screen.dart';
 import 'shell.dart';
+
+final routerProvider = Provider<GoRouter>(buildRouter);
 
 // Route structure notes:
 // - StatefulShellRoute owns /home, /record, and /settings. Its IndexedStack
@@ -17,7 +21,7 @@ import 'shell.dart';
 //   were a root-level route it would replace the shell entirely.
 // - /activity/:id is a root-level route so it overlays the full screen. It is
 //   pushed (not go'd) from the home list so the shell stays alive underneath.
-GoRouter buildRouter() {
+GoRouter buildRouter(Ref ref) {
   final rootKey = GlobalKey<NavigatorState>();
 
   return GoRouter(
@@ -37,6 +41,13 @@ GoRouter buildRouter() {
             routes: [
               GoRoute(
                 path: '/record',
+                // While a recording is live, the confirm screen must not be
+                // reachable — any navigation to /record bounces to the live
+                // recording screen so a second recording can't be started.
+                redirect: (_, _) {
+                  final activeId = ref.read(activeRecordingIdProvider);
+                  return activeId != null ? '/record/recording/$activeId' : null;
+                },
                 builder: (_, _) => const ConfirmRecordScreen(),
                 routes: [
                   GoRoute(

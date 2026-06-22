@@ -14,7 +14,7 @@ class CardioRoundsApp extends ConsumerStatefulWidget {
 }
 
 class _CardioRoundsAppState extends ConsumerState<CardioRoundsApp> {
-  late final _router = buildRouter();
+  late final _router = ref.read(routerProvider);
 
   Widget _maybePortraitFrame(Widget? child) {
     final inner = child ?? const SizedBox.shrink();
