@@ -46,8 +46,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       if (!_noteFocus.hasFocus) _save(note: _noteController.text);
     });
     _sportTypeFocus.addListener(() {
-      if (!_sportTypeFocus.hasFocus)
+      if (!_sportTypeFocus.hasFocus) {
         _save(sportType: _sportTypeController.text);
+      }
     });
   }
 
