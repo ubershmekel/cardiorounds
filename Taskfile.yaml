@@ -60,10 +60,6 @@ tasks:
     cmds:
       - dart format app
       - npx prettier --write .
-  bump:
-    desc: Alias for bump-version
-    cmds:
-      - task: bump-version
   bump-version:
     desc:
       Auto-increment the build number in pubspec.yaml (e.g. 1.0.0+3 -> 1.0.0+4)
