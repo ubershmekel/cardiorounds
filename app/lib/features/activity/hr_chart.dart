@@ -890,6 +890,11 @@ class _TrailingZoomableHrChartState extends State<TrailingZoomableHrChart> {
   late int _spanMs = widget.initialSpanMs;
   int? _g0SpanMs;
 
+  // True once the user zooms out to the whole recording. We then track the full
+  // span as new samples arrive, rather than reverting to a trailing window (the
+  // stored _spanMs would otherwise stop covering the now-longer recording).
+  bool _lockedToFullSpan = false;
+
   int get _fullSpanMs => widget.fullEndMs - widget.fullStartMs;
 
   int _clampSpan(int spanMs) {
@@ -914,13 +919,23 @@ class _TrailingZoomableHrChartState extends State<TrailingZoomableHrChart> {
   }
 
   void _onScaleStart(ScaleStartDetails _) {
-    _g0SpanMs = _clampSpan(_spanMs);
+    _g0SpanMs = _clampSpan(_lockedToFullSpan ? _fullSpanMs : _spanMs);
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
     final startSpan = _g0SpanMs;
     if (startSpan == null || d.scale <= 0) return;
-    setState(() => _spanMs = _clampSpan((startSpan / d.scale).round()));
+    final requested = (startSpan / d.scale).round();
+    setState(() {
+      // Zooming out to (or past) the full span sticks the view to the whole
+      // recording so it doesn't drift back into a trailing window.
+      if (requested >= _fullSpanMs) {
+        _lockedToFullSpan = true;
+      } else {
+        _lockedToFullSpan = false;
+        _spanMs = _clampSpan(requested);
+      }
+    });
   }
 
   void _onScaleEnd(ScaleEndDetails _) {
@@ -929,11 +944,16 @@ class _TrailingZoomableHrChartState extends State<TrailingZoomableHrChart> {
 
   @override
   Widget build(BuildContext context) {
-    final span = _clampSpan(_spanMs);
-    final rawStart = widget.fullEndMs - span;
-    final windowStart = rawStart < widget.fullStartMs
-        ? widget.fullStartMs
-        : rawStart;
+    final int windowStart;
+    if (_lockedToFullSpan) {
+      windowStart = widget.fullStartMs;
+    } else {
+      final span = _clampSpan(_spanMs);
+      final rawStart = widget.fullEndMs - span;
+      windowStart = rawStart < widget.fullStartMs
+          ? widget.fullStartMs
+          : rawStart;
+    }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
