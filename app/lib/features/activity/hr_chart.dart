@@ -925,11 +925,16 @@ class _TrailingZoomableHrChartState extends State<TrailingZoomableHrChart> {
   void _onScaleUpdate(ScaleUpdateDetails d) {
     final startSpan = _g0SpanMs;
     if (startSpan == null || d.scale <= 0) return;
+    final fullSpan = _fullSpanMs;
+    if (fullSpan <= 0) return;
     final requested = (startSpan / d.scale).round();
     setState(() {
-      // Zooming out to (or past) the full span sticks the view to the whole
-      // recording so it doesn't drift back into a trailing window.
-      if (requested >= _fullSpanMs) {
+      // Lock to the full recording once you zoom out to within ~5% of it.
+      // Without the tolerance the lock rarely engages: the live recording keeps
+      // extending fullSpan each frame, so `requested` (from the span snapshotted
+      // at gesture start) lands just short of full and never trips an exact >=.
+      // Pinching back below the threshold releases the lock.
+      if (requested >= fullSpan * 0.95) {
         _lockedToFullSpan = true;
       } else {
         _lockedToFullSpan = false;
