@@ -170,7 +170,10 @@ class RecordingController extends StateNotifier<RecordingState> {
       state = state.copyWith(
         currentBpm: sample.bpm,
         bpmIsNull: sample.bpm == null,
-        now: sample.at,
+        // Drive elapsed time from the wall clock, not sample.at: native samples
+        // arrive in buffered batches with past timestamps, which made the
+        // elapsed clock jump backwards (e.g. 0:13 → 0:10 → 0:13).
+        now: DateTime.now(),
         sourceStatus: recovered ? HrSourceStatusKind.connected : null,
         sourceStatusAt: recovered ? sample.at : null,
         clearSourceStatusMessage: recovered,
@@ -198,7 +201,9 @@ class RecordingController extends StateNotifier<RecordingState> {
     }
     if (mounted) {
       state = state.copyWith(
-        now: status.at,
+        // Wall clock, not status.at, to keep elapsed monotonic (see _onSample).
+        // sourceStatusAt still uses status.at so signal age stays accurate.
+        now: DateTime.now(),
         currentBpm: status.kind == HrSourceStatusKind.connected
             ? state.currentBpm
             : null,
