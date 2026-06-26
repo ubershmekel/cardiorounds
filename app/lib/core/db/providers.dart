@@ -12,7 +12,13 @@ final activeRecordingIdProvider = StateProvider<int?>((_) => null);
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
-  ref.onDispose(db.close);
+  // Tolerate the restore flow, which closes the db manually before
+  // invalidating this provider, so dispose's close() may be a no-op.
+  ref.onDispose(() async {
+    try {
+      await db.close();
+    } catch (_) {}
+  });
   return db;
 });
 

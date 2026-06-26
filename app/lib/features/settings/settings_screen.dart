@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -220,6 +221,12 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
+            icon: const Icon(Icons.upload_outlined),
+            label: const Text('Restore from database'),
+            onPressed: () => _restoreDatabase(context),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
             icon: const Icon(Icons.article_outlined),
             label: const Text('Export logs'),
             onPressed: () => _exportLogs(context),
@@ -252,6 +259,79 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
       getFile: AppLogger.instance.resolveLogFile,
       subject: 'Cardio Rounds logs',
     );
+  }
+
+  Future<void> _restoreDatabase(BuildContext context) async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Restore not available on web')),
+      );
+      return;
+    }
+
+    final result = await FilePicker.pickFiles(withData: false);
+    final path = result?.files.single.path;
+    if (path == null) return; // cancelled
+
+    final source = File(path);
+    final bytes = await source.readAsBytes();
+    // A SQLite file starts with the 16-byte magic header "SQLite format 3\0".
+    // Reject anything else so we don't overwrite the live DB with garbage.
+    const header = 'SQLite format 3\x00';
+    final looksLikeSqlite =
+        bytes.length >= header.length &&
+        String.fromCharCodes(bytes.take(header.length)) == header;
+    if (!looksLikeSqlite) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Not a valid SQLite database file')),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restore from database?'),
+        content: const Text(
+          'This will permanently delete all your current data and replace it '
+          'with the contents of the selected file. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete and restore'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final target = await AppDatabase.databaseFile();
+    // Close the live connection before overwriting the file on disk, then
+    // remove drift's WAL sidecar files so they can't corrupt the new DB.
+    await ref.read(databaseProvider).close();
+    await target.writeAsBytes(bytes, flush: true);
+    for (final suffix in const ['-wal', '-shm']) {
+      final sidecar = File('${target.path}$suffix');
+      if (await sidecar.exists()) await sidecar.delete();
+    }
+    // Rebuild the database singleton; every data provider watches it, so the
+    // UI reloads from the restored file.
+    ref.invalidate(databaseProvider);
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Database restored')));
   }
 
   Future<void> _openSourceCode(BuildContext context) async {
