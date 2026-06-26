@@ -5,10 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/app.dart';
 import 'core/app_logger.dart';
+import 'core/build_info.dart';
 import 'core/settings/app_settings.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  appLog('App', 'Launched ${appBuildLabel()}');
   await _configureBluetoothBackgroundRestore();
   final prefs = await SharedPreferences.getInstance();
   runApp(
