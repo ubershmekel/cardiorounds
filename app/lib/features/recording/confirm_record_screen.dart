@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -417,6 +418,50 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     ];
   }
 
+  /// Returns an explicit message when the Bluetooth adapter can't be scanned
+  /// (off, no permission, unsupported), or null when scanning is possible so
+  /// the normal device list / "looking for straps" flow takes over. Web has no
+  /// adapter, so it always falls through to null.
+  Widget? _buildBluetoothNotice(BuildContext context) {
+    if (kIsWeb) return null;
+    final state = ref.watch(bluetoothAdapterStateProvider).valueOrNull;
+    final String message;
+    switch (state) {
+      case BluetoothAdapterState.off:
+      case BluetoothAdapterState.turningOff:
+        message =
+            'Bluetooth is off. Turn on Bluetooth to find your heart-rate strap.';
+      case BluetoothAdapterState.unauthorized:
+        message =
+            'Cardio Rounds doesn\'t have permission to use Bluetooth. '
+            'Enable Bluetooth access for the app in your device settings.';
+      case BluetoothAdapterState.unavailable:
+        message = 'This device doesn\'t support Bluetooth.';
+      // on / turningOn / unknown / loading: let the normal flow proceed.
+      default:
+        return null;
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.bluetooth_disabled,
+            color: Theme.of(context).colorScheme.error,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<Widget> _buildDevicePicker(BuildContext context) {
     final entries = _displayedEntries();
 
@@ -443,12 +488,14 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
         ],
       ),
       const SizedBox(height: 8),
-      if (entries.isEmpty && !_scanning)
+      if (_buildBluetoothNotice(context) case final notice?)
+        notice
+      else if (entries.isEmpty && !_scanning)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 24),
           child: Text(
             'No heart-rate straps found yet.\n'
-            'Make sure your strap is on and within range.',
+            'Make sure Bluetooth is on and your strap is on and within range.',
             textAlign: TextAlign.center,
           ),
         )

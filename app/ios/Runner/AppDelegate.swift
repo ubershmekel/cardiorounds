@@ -18,6 +18,13 @@ import UIKit
   ) -> Bool {
     registerLiveActivityChannel(pluginRegistry: self)
     registerHrCentral(pluginRegistry: self)
+    // The central is otherwise created lazily on the first scan (so the
+    // Bluetooth permission prompt lands on the record screen, not at launch).
+    // But when iOS relaunches us specifically to restore a BLE session, the
+    // central must exist now for `willRestoreState:` to fire.
+    if launchOptions?[.bluetoothCentrals] != nil {
+      HrBackgroundCentral.shared.ensureCentral()
+    }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 

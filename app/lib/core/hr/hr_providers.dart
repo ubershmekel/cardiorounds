@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'bluetooth_hr_scanner.dart';
@@ -14,6 +15,18 @@ import 'native_hr_scanner.dart';
 /// connecting, so a preview connection can be handed to recording without a
 /// reconnect. Android (and anything else) stays on FlutterBluePlus.
 bool get useNativeBluetooth => !kIsWeb && Platform.isIOS;
+
+/// Streams the Bluetooth adapter's power/permission state so the UI can tell
+/// the user *why* no devices are showing (off, no permission, unsupported).
+/// FlutterBluePlus is initialized on every platform — including iOS, where
+/// scanning itself goes through the native central — so this works everywhere
+/// except web, which has no adapter to report on.
+final bluetoothAdapterStateProvider = StreamProvider<BluetoothAdapterState>((
+  ref,
+) {
+  if (kIsWeb) return const Stream.empty();
+  return FlutterBluePlus.adapterState;
+});
 
 /// Builds the platform heart-rate scanner. Overridden in tests with a fake.
 final hrScannerFactoryProvider = Provider<HrScanner Function()>((ref) {

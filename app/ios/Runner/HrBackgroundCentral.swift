@@ -33,6 +33,10 @@ final class HrBackgroundCentral: NSObject {
   private let queue = DispatchQueue(label: "cardiorounds.hr.central")
 
   private var central: CBCentralManager?
+  // Guards lazy creation of `central` in `ensureCentral`, which can be hit from
+  // the platform-channel thread (first scan) and from the main thread (a BLE
+  // restore relaunch) at roughly the same time.
+  private let centralLock = NSLock()
   private var channel: FlutterMethodChannel?
 
   // Guards the buffers, which are written from the CoreBluetooth `queue` and
@@ -63,8 +67,12 @@ final class HrBackgroundCentral: NSObject {
 
   // MARK: - Wiring
 
-  /// Called once at launch. Creating the central here (with the restore key)
-  /// is what makes `willRestoreState:` eligible to fire after a relaunch.
+  /// Called once at launch. Only wires up the method channel — the
+  /// `CBCentralManager` is created lazily by `ensureCentral` on the first scan
+  /// or connect, so the iOS Bluetooth permission prompt appears when the user
+  /// reaches the record screen rather than at launch. The one exception is a
+  /// BLE restore relaunch, where AppDelegate calls `ensureCentral` eagerly so
+  /// `willRestoreState:` can fire (permission is already granted in that case).
   func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
       name: Self.channelName,
@@ -74,7 +82,15 @@ final class HrBackgroundCentral: NSObject {
       self?.handle(call, result: result)
     }
     self.channel = channel
+  }
 
+  /// Idempotently creates the central with the restore key. Creating a
+  /// `CBCentralManager` is the call that triggers the iOS permission prompt, so
+  /// the timing of the *first* call here is the timing of the prompt.
+  func ensureCentral() {
+    centralLock.lock()
+    defer { centralLock.unlock() }
+    guard central == nil else { return }
     central = CBCentralManager(
       delegate: self,
       queue: queue,
@@ -112,6 +128,7 @@ final class HrBackgroundCentral: NSObject {
 
   private func start(uuid: UUID, name: String?, result: @escaping FlutterResult) {
     queue.async {
+      self.ensureCentral()
       self.targetId = uuid
       self.desiredName = name
       self.recording = true
@@ -168,6 +185,7 @@ final class HrBackgroundCentral: NSObject {
 
   private func scanStart(result: @escaping FlutterResult) {
     queue.async {
+      self.ensureCentral()
       guard let central = self.central else {
         result(FlutterError(code: "not_ready", message: "Central not initialised", details: nil))
         return
