@@ -29,6 +29,10 @@
 - Do not hide UI behind `kIsWeb` guards — always show the controls. So the
   layout and flow are still testable in a browser.
 
+## iOS builds & deployment
+
+- **Xcode Cloud handles CI/CD.** Pushing to `main` triggers a cloud build and upload to App Store Connect automatically — no need to run `flutter build ipa` or upload manually.
+
 ## Logging
 
 - App logging is centralized in `app/lib/core/app_logger.dart`; use

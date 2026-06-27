@@ -1,7 +1,9 @@
 # Uncomment this line to define a global platform for your project
 # platform :ios, '13.0'
 
-# Exclude Photos/Apple Music APIs from file_picker — app only picks database files.
+# Exclude Photos/Apple Music APIs from file_picker (app only picks database files).
+# Without these, file_picker pulls in DKImagePickerController which requires
+# NSPhotoLibraryUsageDescription and triggers App Store rejection ITMS-90683.
 Pod::PICKER_MEDIA = false
 Pod::PICKER_AUDIO = false
 
