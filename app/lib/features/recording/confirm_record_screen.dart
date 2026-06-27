@@ -374,7 +374,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     return RawAutocomplete<String>(
       textEditingController: _sportTypeController,
       focusNode: _sportTypeFocus,
-      optionsBuilder: (_) => _pastSportTypes.take(5),
+      optionsBuilder: (_) => _pastSportTypes.take(10),
       optionsViewBuilder: (context, onSelected, options) => TapRegion(
         groupId: _sportTypeFocus,
         child: SportTypeOptions(options: options, onSelected: onSelected),

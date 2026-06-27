@@ -372,7 +372,7 @@ class _ActivityBody extends StatelessWidget {
               RawAutocomplete<String>(
                 textEditingController: sportTypeController,
                 focusNode: sportTypeFocusNode,
-                optionsBuilder: (_) => pastSportTypes.take(5),
+                optionsBuilder: (_) => pastSportTypes.take(10),
                 optionsViewBuilder: (context, onSelected, options) => TapRegion(
                   groupId: sportTypeFocusNode,
                   child: SportTypeOptions(

@@ -324,7 +324,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         // This field sits at the bottom of the scroll view; open the overlay
         // upward so the keyboard doesn't squash or hide it.
         optionsViewOpenDirection: OptionsViewOpenDirection.up,
-        optionsBuilder: (_) => _pastSportTypes.take(5),
+        optionsBuilder: (_) => _pastSportTypes.take(10),
         optionsViewBuilder: (context, onSelected, options) => TapRegion(
           groupId: _sportTypeFocus,
           child: SportTypeOptions(
