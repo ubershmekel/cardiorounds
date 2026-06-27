@@ -34,6 +34,7 @@ class _CardioRoundsAppState extends ConsumerState<CardioRoundsApp> {
     final startup = ref.watch(startupProvider);
     return MaterialApp.router(
       title: 'Cardio Rounds',
+      debugShowCheckedModeBanner: false,
       theme: buildDarkTheme(),
       darkTheme: buildDarkTheme(),
       themeMode: ThemeMode.dark,
