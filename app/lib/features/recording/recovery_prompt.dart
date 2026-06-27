@@ -44,12 +44,20 @@ class _RecoveryPromptState extends ConsumerState<RecoveryPrompt> {
     if (ref.read(activeRecordingIdProvider) != null) return;
     _handled = true;
 
+    // Measure "ago" from the last sample we actually captured, not the start —
+    // the gap since the recording died is what the user cares about.
+    final lastTMs = await ref.read(databaseProvider).lastSampleTMs(
+      recording.activityId,
+    );
+    if (!mounted) return;
+    final interruptedAtMs = recording.startedAtMs + (lastTMs ?? 0);
+
     final choice = await showDialog<_RecoveryChoice>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Resume recording?'),
-        content: Text(_describe(recording)),
+        content: Text(_describe(recording, interruptedAtMs)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, _RecoveryChoice.finish),
@@ -73,9 +81,9 @@ class _RecoveryPromptState extends ConsumerState<RecoveryPrompt> {
     }
   }
 
-  String _describe(InterruptedRecording recording) {
-    final started = DateTime.fromMillisecondsSinceEpoch(recording.startedAtMs);
-    final ago = DateTime.now().difference(started);
+  String _describe(InterruptedRecording recording, int interruptedAtMs) {
+    final interruptedAt = DateTime.fromMillisecondsSinceEpoch(interruptedAtMs);
+    final ago = DateTime.now().difference(interruptedAt);
     return 'A recording on ${recording.deviceName} was interrupted '
         '${_formatAgo(ago)}. Resume it, or save what was already recorded as a '
         'finished workout?';
