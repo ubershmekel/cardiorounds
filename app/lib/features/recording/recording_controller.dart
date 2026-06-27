@@ -8,6 +8,7 @@ import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 import '../../core/hr/fake_hr_source.dart';
 import '../../core/hr/hr_source.dart';
+import '../../core/recording/interrupted_recording.dart';
 import '../../core/zones/zones.dart';
 import 'live_activity.dart';
 
@@ -78,15 +79,19 @@ class RecordingController extends StateNotifier<RecordingState> {
     required this.db,
     required this.source,
     required int activityId,
+    this.sentinel = const RecordingSentinel(),
+    DateTime? resumeStartedAt,
     ZoneSetup? zoneSetup,
     this.onStopped,
-  }) : _started = DateTime.now(),
+  }) : _started = resumeStartedAt ?? DateTime.now(),
        _zoneSetup = zoneSetup,
        super(
          RecordingState(
            activityId: activityId,
            deviceName: source.deviceName,
-           startedAt: DateTime.now(),
+           // For a resumed recording, anchor to the original start so sample
+           // tMs offsets and elapsed time continue the existing timeline.
+           startedAt: resumeStartedAt ?? DateTime.now(),
            now: DateTime.now(),
            currentBpm: null,
            sourceStatus: HrSourceStatusKind.connected,
@@ -96,7 +101,9 @@ class RecordingController extends StateNotifier<RecordingState> {
            stopped: false,
          ),
        ) {
-    appLog('Recording', 'Started activity $activityId on ${source.deviceName}');
+    final verb = resumeStartedAt == null ? 'Started' : 'Resumed';
+    appLog('Recording', '$verb activity $activityId on ${source.deviceName}');
+    _writeSentinel(activityId);
     _liveActivity.start(
       activityId: activityId,
       deviceName: source.deviceName,
@@ -137,7 +144,12 @@ class RecordingController extends StateNotifier<RecordingState> {
 
   final AppDatabase db;
   final HeartRateSource source;
+  final RecordingSentinel sentinel;
   final VoidCallback? onStopped;
+  // Tracks the in-flight sentinel write so a quick stop can await it before
+  // clearing — otherwise a late write could land after clear() and resurrect a
+  // bogus recovery prompt for an already-stopped recording.
+  Future<void>? _sentinelWrite;
   final DateTime _started;
   final ZoneSetup? _zoneSetup;
   final RecordingLiveActivity _liveActivity = const RecordingLiveActivity();
@@ -147,6 +159,23 @@ class RecordingController extends StateNotifier<RecordingState> {
   late final Timer _statsTicker;
   int _sampleCount = 0;
   late DateTime _lastStatsTick;
+
+  /// Drops a crash sentinel so an interrupted recording can be recovered on the
+  /// next launch. Only real BLE devices can be reconnected to, so the fake/debug
+  /// source (no platform id) is skipped. Fire-and-forget: a failed write just
+  /// means no recovery is offered, which is safe.
+  void _writeSentinel(int activityId) {
+    final platformId = source.devicePlatformId;
+    if (platformId == null) return;
+    _sentinelWrite = sentinel.write(
+      InterruptedRecording(
+        activityId: activityId,
+        startedAtMs: state.startedAt.millisecondsSinceEpoch,
+        devicePlatformId: platformId,
+        deviceName: source.deviceName,
+      ),
+    );
+  }
 
   Future<void> _onSample(HrSample sample) async {
     if (state.stopped) return;
@@ -258,6 +287,11 @@ class RecordingController extends StateNotifier<RecordingState> {
     } catch (e) {
       appLog('Recording', 'Error finalizing activity ${state.activityId}: $e');
     } finally {
+      // Clean stop: drop the crash sentinel so this activity isn't offered for
+      // recovery. dispose() without stop() deliberately leaves it in place.
+      // Await any in-flight write first so it can't land after the clear.
+      await _sentinelWrite;
+      await sentinel.clear();
       await _shutdownResources();
       onStopped?.call();
     }
@@ -315,12 +349,16 @@ final recordingControllerProvider = StateNotifierProvider.autoDispose
       // Picker writes here before navigating to the recording screen. Fall back to
       // a synthetic source if someone deep-links into /recording/:id directly.
       final source = ref.read(pendingHrSourceProvider) ?? FakeHeartRateSource();
-      // Clear the slot AFTER this provider finishes initializing. Mutating another
-      // provider inline would trip Riverpod's "providers can't modify each other
-      // during build" guard.
+      // Non-null when the recovery flow is resuming a crashed recording; anchors
+      // the controller to the original start time instead of now.
+      final resumeStartedAt = ref.read(resumeStartedAtProvider);
+      // Clear the slots AFTER this provider finishes initializing. Mutating
+      // another provider inline would trip Riverpod's "providers can't modify
+      // each other during build" guard.
       Future.microtask(() {
         try {
           ref.read(pendingHrSourceProvider.notifier).state = null;
+          ref.read(resumeStartedAtProvider.notifier).state = null;
         } catch (_) {
           // Container may be disposed by then; safe to swallow.
         }
@@ -329,6 +367,8 @@ final recordingControllerProvider = StateNotifierProvider.autoDispose
         db: db,
         source: source,
         activityId: activityId,
+        sentinel: ref.read(recordingSentinelProvider),
+        resumeStartedAt: resumeStartedAt,
         zoneSetup: zoneSetupFor(
           maxHr: athlete?.maxHeartrate,
           restingHr: athlete?.restingHeartrate,

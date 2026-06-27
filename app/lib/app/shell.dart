@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/db/providers.dart';
+import '../features/recording/recovery_prompt.dart';
 
 class HomeShell extends ConsumerWidget {
   const HomeShell({super.key, required this.navigationShell});
@@ -24,7 +25,8 @@ class HomeShell extends ConsumerWidget {
     final isRecording = activeRecordingId != null;
 
     return Scaffold(
-      body: navigationShell,
+      // Offers interrupted-recording recovery once per launch (see widget).
+      body: RecoveryPrompt(child: navigationShell),
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) => _onTap(index, activeRecordingId),

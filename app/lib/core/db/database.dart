@@ -199,6 +199,18 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// The tMs of the most recent sample, or null if the activity has none. Used
+  /// to finalize a crashed recording's duration when the user discards it.
+  Future<int?> lastSampleTMs(int activityId) async {
+    final row =
+        await (select(samples)
+              ..where((s) => s.activityId.equals(activityId))
+              ..orderBy([(s) => OrderingTerm.desc(s.tMs)])
+              ..limit(1))
+            .getSingleOrNull();
+    return row?.tMs;
+  }
+
   Future<void> insertSample({
     required int activityId,
     required int tMs,

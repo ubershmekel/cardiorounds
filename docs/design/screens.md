@@ -112,22 +112,33 @@ user has interacted with the list.
   disabled
 - Error — red message above the list; scanning resumes
 - No devices found — instructional text with retry button
-- Bluetooth off — handled at the OS level before this screen is reached
+- Bluetooth off / no permission / unsupported — an explicit notice replaces the
+  device list (e.g. "Bluetooth is off…", "…doesn't have permission to use
+  Bluetooth…"), so the user knows why nothing is showing
 
 You can go back or cancel from any state.
 
 ## Interrupted recording recovery
 
-If the app detects an activity that was started but never ended (e.g. after a
-crash), it shows a prompt on launch:
+If a recording was interrupted (the app crashed or was killed mid-recording), a
+sentinel file left behind by the live recording is detected on the next launch
+and a prompt is shown:
 
-> "It looks like your last recording was interrupted. Continue where you left
-> off?"
+> "Resume recording? A recording on <device> was interrupted <time> ago. Resume
+> it, or save what was already recorded as a finished workout?"
 
-**Continue** — opens the recording screen for that activity, allowing the user
-to stop, review, and save or discard as usual.
+**Resume** — reconnects to the same strap in the background (with a
+"Reconnecting…" spinner) and reopens the recording screen, continuing the
+original activity's timeline. If the strap can't be reconnected, the prompt is
+left for a later retry and a message is shown.
 
-**Discard** — deletes the incomplete activity.
+**Save as finished** — closes the interrupted activity out as a completed
+workout (duration set from the last recorded sample). The data is kept, not
+deleted; the user can review or delete it from history like any other workout.
+
+The samples recorded before the interruption are never lost — they are written
+to the database as they arrive, so recovery only decides whether to keep
+recording or finalize what exists. Not offered on web (no local file storage).
 
 ## Recording screen
 
