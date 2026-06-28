@@ -45,6 +45,15 @@ final activityProvider = StreamProvider.family<Activity, int>((
   return db.watchActivity(activityId);
 });
 
+/// Distinct past sport-type labels (most-recent first) for autocomplete.
+/// autoDispose so each visit to a field-bearing screen refetches, picking up
+/// types added since.
+final distinctSportTypesProvider = FutureProvider.autoDispose<List<String>>((
+  ref,
+) {
+  return ref.watch(databaseProvider).distinctSportTypes();
+});
+
 final samplesProvider = StreamProvider.family<List<SampleRow>, int>((
   ref,
   activityId,

@@ -11,7 +11,7 @@ import '../activity/hr_stats.dart';
 import '../activity/hr_stats_row.dart';
 import '../activity/zone_breakdown.dart';
 import 'recording_controller.dart';
-import 'sport_type_options.dart';
+import 'activity_meta_fields.dart';
 
 const int _liveWindowMs = 15 * 60 * 1000;
 
@@ -25,60 +25,6 @@ class RecordingScreen extends ConsumerStatefulWidget {
 }
 
 class _RecordingScreenState extends ConsumerState<RecordingScreen> {
-  bool _controllersInitialized = false;
-  final _nameController = TextEditingController();
-  final _noteController = TextEditingController();
-  final _sportTypeController = TextEditingController();
-  final _nameFocus = FocusNode();
-  final _noteFocus = FocusNode();
-  final _sportTypeFocus = FocusNode();
-  List<String> _pastSportTypes = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPastSportTypes();
-    // FocusNodes let us save to DB when the user taps away (hasFocus → false).
-    _nameFocus.addListener(() {
-      if (!_nameFocus.hasFocus) _save(name: _nameController.text);
-    });
-    _noteFocus.addListener(() {
-      if (!_noteFocus.hasFocus) _save(note: _noteController.text);
-    });
-    _sportTypeFocus.addListener(() {
-      if (!_sportTypeFocus.hasFocus) {
-        _save(sportType: _sportTypeController.text);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _noteController.dispose();
-    _sportTypeController.dispose();
-    _nameFocus.dispose();
-    _noteFocus.dispose();
-    _sportTypeFocus.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadPastSportTypes() async {
-    final types = await ref.read(databaseProvider).distinctSportTypes();
-    if (mounted) setState(() => _pastSportTypes = types);
-  }
-
-  void _save({String? name, String? note, String? sportType}) {
-    ref
-        .read(databaseProvider)
-        .updateActivity(
-          activityId: widget.activityId,
-          name: name,
-          note: note,
-          sportType: sportType,
-        );
-  }
-
   String _formatElapsed(Duration d) {
     final h = d.inHours;
     final m = d.inMinutes.remainder(60);
@@ -148,17 +94,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     final state = ref.watch(recordingControllerProvider(activityId));
     final samples = ref.watch(samplesProvider(activityId)).valueOrNull ?? [];
     final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
-
-    // Prefill editable fields once the activity row is available; afterwards the
-    // controllers own the text so we don't clobber what the user is typing.
-    ref.watch(activityProvider(activityId)).whenData((a) {
-      if (!_controllersInitialized) {
-        _controllersInitialized = true;
-        _nameController.text = a.name ?? '';
-        _noteController.text = a.note ?? '';
-        _sportTypeController.text = a.sportType ?? '';
-      }
-    });
     final zoneSetup = zoneSetupFor(
       maxHr: athlete?.maxHeartrate,
       restingHr: athlete?.restingHeartrate,
@@ -271,7 +206,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      ..._buildEditableFields(context),
+                      // The field sits low in the scroll view, so open the
+                      // sport-type overlay upward to clear the keyboard.
+                      ActivityMetaFields(
+                        activityId: activityId,
+                        sportTypeOpenDirection: OptionsViewOpenDirection.up,
+                      ),
                     ],
                   ),
                 ),
@@ -281,82 +221,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         },
       ),
     );
-  }
-
-  List<Widget> _buildEditableFields(BuildContext context) {
-    final theme = Theme.of(context);
-    return [
-      TextField(
-        controller: _nameController,
-        focusNode: _nameFocus,
-        onTapOutside: (_) => _nameFocus.unfocus(),
-        onSubmitted: (_) => _noteFocus.requestFocus(),
-        textInputAction: TextInputAction.next,
-        textCapitalization: TextCapitalization.sentences,
-        style: theme.textTheme.titleLarge,
-        textAlign: TextAlign.center,
-        decoration: const InputDecoration(
-          hintText: 'Add a name…',
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      TextField(
-        controller: _noteController,
-        focusNode: _noteFocus,
-        onTapOutside: (_) => _noteFocus.unfocus(),
-        maxLines: null,
-        textInputAction: TextInputAction.done,
-        textCapitalization: TextCapitalization.sentences,
-        textAlign: TextAlign.center,
-        style: theme.textTheme.bodyMedium?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-        decoration: const InputDecoration(
-          hintText: 'Add a note…',
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      RawAutocomplete<String>(
-        textEditingController: _sportTypeController,
-        focusNode: _sportTypeFocus,
-        // This field sits at the bottom of the scroll view; open the overlay
-        // upward so the keyboard doesn't squash or hide it.
-        optionsViewOpenDirection: OptionsViewOpenDirection.up,
-        optionsBuilder: (_) => _pastSportTypes.take(10),
-        optionsViewBuilder: (context, onSelected, options) => TapRegion(
-          groupId: _sportTypeFocus,
-          child: SportTypeOptions(
-            options: options,
-            onSelected: onSelected,
-            alignment: Alignment.bottomCenter,
-          ),
-        ),
-        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-          // Grouped with the overlay above so a tap outside both drops focus.
-          return TapRegion(
-            groupId: _sportTypeFocus,
-            onTapOutside: (_) => focusNode.unfocus(),
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              textInputAction: TextInputAction.done,
-              textCapitalization: TextCapitalization.sentences,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              decoration: const InputDecoration(
-                hintText: 'Sport type…',
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-          );
-        },
-      ),
-    ];
   }
 }
 

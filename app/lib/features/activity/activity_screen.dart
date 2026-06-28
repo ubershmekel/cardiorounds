@@ -6,7 +6,7 @@ import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 import '../../core/zones/zone_times.dart';
 import '../../core/zones/zones.dart';
-import '../recording/sport_type_options.dart';
+import '../recording/activity_meta_fields.dart';
 import 'activity_duration.dart';
 import 'hr_chart.dart';
 import 'hr_stats.dart';
@@ -26,60 +26,6 @@ class ActivityScreen extends ConsumerStatefulWidget {
 
 class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   bool _editing = false;
-  bool _controllersInitialized = false;
-  final _nameController = TextEditingController();
-  final _noteController = TextEditingController();
-  final _sportTypeController = TextEditingController();
-  final _nameFocus = FocusNode();
-  final _noteFocus = FocusNode();
-  final _sportTypeFocus = FocusNode();
-  List<String> _pastSportTypes = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPastSportTypes();
-    // FocusNodes let us (1) save to DB when the user taps away (hasFocus → false)
-    // and (2) jump focus from name to note on Enter (see onNameSubmitted).
-    _nameFocus.addListener(() {
-      if (!_nameFocus.hasFocus) _save(name: _nameController.text);
-    });
-    _noteFocus.addListener(() {
-      if (!_noteFocus.hasFocus) _save(note: _noteController.text);
-    });
-    _sportTypeFocus.addListener(() {
-      if (!_sportTypeFocus.hasFocus) {
-        _save(sportType: _sportTypeController.text);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _noteController.dispose();
-    _sportTypeController.dispose();
-    _nameFocus.dispose();
-    _noteFocus.dispose();
-    _sportTypeFocus.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadPastSportTypes() async {
-    final types = await ref.read(databaseProvider).distinctSportTypes();
-    if (mounted) setState(() => _pastSportTypes = types);
-  }
-
-  void _save({String? name, String? note, String? sportType}) {
-    ref
-        .read(databaseProvider)
-        .updateActivity(
-          activityId: widget.activityId,
-          name: name,
-          note: note,
-          sportType: sportType,
-        );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,15 +37,6 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
       maxHr: athlete?.maxHeartrate,
       restingHr: athlete?.restingHeartrate,
     );
-
-    activity.whenData((a) {
-      if (!_controllersInitialized) {
-        _controllersInitialized = true;
-        _nameController.text = a.name ?? '';
-        _noteController.text = a.note ?? '';
-        _sportTypeController.text = a.sportType ?? '';
-      }
-    });
 
     return Scaffold(
       appBar: AppBar(
@@ -131,14 +68,6 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             editing: _editing,
             zoneSetup: zoneSetup,
             restingHr: athlete?.restingHeartrate,
-            nameController: _nameController,
-            nameFocusNode: _nameFocus,
-            noteController: _noteController,
-            noteFocusNode: _noteFocus,
-            sportTypeController: _sportTypeController,
-            sportTypeFocusNode: _sportTypeFocus,
-            pastSportTypes: _pastSportTypes,
-            onNameSubmitted: (_) => _noteFocus.requestFocus(),
             onOpenSettings: () => context.go('/settings'),
             onWorkoutChanged: (start, end) async {
               final db = ref.read(databaseProvider);
@@ -189,14 +118,6 @@ class _ActivityBody extends StatelessWidget {
     required this.editing,
     required this.zoneSetup,
     this.restingHr,
-    required this.nameController,
-    required this.nameFocusNode,
-    required this.noteController,
-    required this.noteFocusNode,
-    required this.sportTypeController,
-    required this.sportTypeFocusNode,
-    required this.pastSportTypes,
-    required this.onNameSubmitted,
     required this.onOpenSettings,
     required this.onWorkoutChanged,
     required this.onDelete,
@@ -208,14 +129,6 @@ class _ActivityBody extends StatelessWidget {
   final bool editing;
   final ZoneSetup? zoneSetup;
   final int? restingHr;
-  final TextEditingController nameController;
-  final FocusNode nameFocusNode;
-  final TextEditingController noteController;
-  final FocusNode noteFocusNode;
-  final TextEditingController sportTypeController;
-  final FocusNode sportTypeFocusNode;
-  final List<String> pastSportTypes;
-  final ValueChanged<String> onNameSubmitted;
   final VoidCallback onOpenSettings;
   final void Function(int startMs, int endMs) onWorkoutChanged;
   final VoidCallback onDelete;
@@ -339,71 +252,7 @@ class _ActivityBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(
-                controller: nameController,
-                focusNode: nameFocusNode,
-                onTapOutside: (_) => nameFocusNode.unfocus(),
-                onSubmitted: onNameSubmitted,
-                textCapitalization: TextCapitalization.sentences,
-                textInputAction: TextInputAction.next,
-                style: theme.textTheme.titleLarge,
-                decoration: InputDecoration(
-                  hintText: 'Add a name…',
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              TextField(
-                controller: noteController,
-                focusNode: noteFocusNode,
-                onTapOutside: (_) => noteFocusNode.unfocus(),
-                maxLines: null,
-                textCapitalization: TextCapitalization.sentences,
-                textInputAction: TextInputAction.done,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Add a note…',
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              RawAutocomplete<String>(
-                textEditingController: sportTypeController,
-                focusNode: sportTypeFocusNode,
-                optionsBuilder: (_) => pastSportTypes.take(10),
-                optionsViewBuilder: (context, onSelected, options) => TapRegion(
-                  groupId: sportTypeFocusNode,
-                  child: SportTypeOptions(
-                    options: options,
-                    onSelected: onSelected,
-                  ),
-                ),
-                fieldViewBuilder:
-                    (context, controller, focusNode, onFieldSubmitted) {
-                      // Grouped with the overlay above so a tap outside both
-                      // drops focus.
-                      return TapRegion(
-                        groupId: sportTypeFocusNode,
-                        onTapOutside: (_) => focusNode.unfocus(),
-                        child: TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          textCapitalization: TextCapitalization.sentences,
-                          textInputAction: TextInputAction.done,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: 'Sport type…',
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        ),
-                      );
-                    },
-              ),
+              ActivityMetaFields(activityId: activity.id),
               const SizedBox(height: 4),
               Text(
                 meta,

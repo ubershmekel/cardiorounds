@@ -14,7 +14,7 @@ import '../../core/hr/hr_providers.dart';
 import '../../core/hr/hr_scanner.dart';
 import '../../core/hr/hr_source.dart';
 import '../../core/settings/app_settings.dart';
-import 'sport_type_options.dart';
+import 'sport_type_field.dart';
 
 /// A row in the device picker — either a scanned Bluetooth device or the
 /// simulated strap. Snapshotting the display fields here keeps the selected
@@ -50,7 +50,6 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
 
   final _sportTypeController = TextEditingController();
   final _sportTypeFocus = FocusNode();
-  List<String> _pastSportTypes = const [];
 
   HrScanner? _scanner;
   StreamSubscription<List<ScannedDevice>>? _scanResultsSub;
@@ -85,7 +84,6 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   @override
   void initState() {
     super.initState();
-    _prefillSportType();
     if (!kIsWeb) {
       _scanner = ref.read(hrScannerFactoryProvider)();
       _init();
@@ -115,18 +113,6 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       appLog('Scan', 'Scan failed: $e');
     } finally {
       if (mounted) setState(() => _scanning = false);
-    }
-  }
-
-  Future<void> _prefillSportType() async {
-    final pastSportTypes = await ref
-        .read(databaseProvider)
-        .distinctSportTypes();
-    if (!mounted || pastSportTypes.isEmpty) return;
-    setState(() => _pastSportTypes = pastSportTypes);
-    // Don't clobber anything the user typed while the query was in flight.
-    if (_sportTypeController.text.isEmpty) {
-      _sportTypeController.text = pastSportTypes.first;
     }
   }
 
@@ -371,31 +357,15 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   }
 
   Widget _buildSportTypeField() {
-    return RawAutocomplete<String>(
-      textEditingController: _sportTypeController,
+    return SportTypeField(
+      controller: _sportTypeController,
       focusNode: _sportTypeFocus,
-      optionsBuilder: (_) => _pastSportTypes.take(10),
-      optionsViewBuilder: (context, onSelected, options) => TapRegion(
-        groupId: _sportTypeFocus,
-        child: SportTypeOptions(options: options, onSelected: onSelected),
+      prefillWithMostRecent: true,
+      decoration: const InputDecoration(
+        labelText: 'Sport type (optional)',
+        hintText: 'e.g. BJJ, Treadmill, Bike',
+        border: OutlineInputBorder(),
       ),
-      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-        // Grouped with the overlay above so a tap outside both drops focus.
-        return TapRegion(
-          groupId: _sportTypeFocus,
-          onTapOutside: (_) => focusNode.unfocus(),
-          child: TextField(
-            controller: controller,
-            focusNode: focusNode,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Sport type (optional)',
-              hintText: 'e.g. BJJ, Treadmill, Bike',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        );
-      },
     );
   }
 
