@@ -64,6 +64,18 @@ When the "Fake heart-rate device" toggle is on (Advanced settings), a
 **simulated strap** appears as the first row in this same list and behaves like
 any other selectable device.
 
+#### Multiple-device selection
+
+When the "Record from multiple devices" toggle is on (Advanced settings), the
+list becomes a **multi-select**: tapping a row toggles it in or out of the
+selection instead of replacing the previous pick. Each selected row opens its
+own live preview and shows its BPM (see below). Scanning keeps running while
+devices are selected, so other rows are not greyed out, and new straps can still
+be added. The top **Start** button is enabled once at least one device is
+selected and commits to **all** of them. With the toggle off, selection is
+single-device exactly as described below. See
+[multi-device-recording.md](multi-device-recording.md).
+
 #### Ordering (stable, never reshuffles)
 
 A list that reorders under your thumb is hard to tap, so order is fixed once and
@@ -81,12 +93,18 @@ left alone:
 
 Tapping a row selects it, which immediately connects to that device and streams
 live BPM in place of the signal bars — without creating an activity. This lets
-the user confirm sensor contact before committing. While a device is selected:
+the user confirm sensor contact before committing. While a device is selected
+(single-device mode):
 
 - Scanning pauses; the other (now stale) rows are greyed out.
 - Tapping the **selected row again** deselects it, disconnects, and resumes
   scanning.
 - Tapping a **different row** switches the selection to that device.
+
+In multiple-device mode the same live-preview connection happens per selected
+device, but several previews are held at once, scanning keeps running, and
+tapping a row toggles only that device (others are unaffected). A device that
+fails to connect shows an error on its own row and can be retried.
 
 The top **Start** button is enabled as soon as a device is selected — it does
 **not** wait for pairing or a first reading. Tapping it reuses the already-open
@@ -132,6 +150,10 @@ and a prompt is shown:
 original activity's timeline. If the strap can't be reconnected, the prompt is
 left for a later retry and a message is shown.
 
+For a multiple-device session the prompt names all devices and resume reconnects
+to each **best-effort** — it continues with whichever reconnect, and only fails
+if none do. See [multi-device-recording.md](multi-device-recording.md).
+
 **Save as finished** — closes the interrupted activity out as a completed
 workout (duration set from the last recorded sample). The data is kept, not
 deleted; the user can review or delete it from history like any other workout.
@@ -172,6 +194,17 @@ recovery period) will live here too. See Milestone 3 in `todo.md`.
 Zone colors on the chart are active only when both max and resting HR are set.
 Otherwise the chart uses a neutral single-color line.
 
+### Multiple devices
+
+When more than one device is recording, the single large BPM number is replaced
+by a **per-device block** for each strap: a color swatch (matching that device's
+chart line), the device name, its current BPM in zone color, its connection
+status, and its **own** min/avg/max and time-in-zone breakdown. Below the blocks
+is a single shared chart drawing **one line per device** (see Chart spec); the
+per-device blocks double as the chart legend. Each device's time-in-zone is
+scored against the single athlete's zones (see
+[multi-device-recording.md](multi-device-recording.md)).
+
 ### Bluetooth disconnect during recording
 
 If the BT device disconnects mid-recording:
@@ -200,6 +233,11 @@ at `/activity/:activityId`.
 - Activity name (editable inline)
 - In-depth analysis and advice (Milestone 3+)
 
+For a multiple-device activity the chart draws one line per device with a legend
+(color swatch + device name), and **each device** gets its own min/avg/max and
+time-in-zone breakdown (per-device blocks, scored against the single athlete's
+zones). See [multi-device-recording.md](multi-device-recording.md).
+
 ### Marker editing
 
 Tap the "edit" icon in the app bar to enter edit mode. While editing, the chart
@@ -220,7 +258,10 @@ converts it to a human marker.
   minimum value is a ten-rounded number under the minimum HR (like 40)
 - **Grid**: subtle horizontal guide lines every 10 bpm, with sparse Y-axis
   labels so the line remains visually dominant
-- **Line**: continuous, colored by zone (see zones.md); breaks at NULL HR gaps
+- **Line**: continuous, colored by zone (see zones.md); breaks at NULL HR gaps.
+  With multiple devices the chart draws one line per device, each in a stable
+  per-device palette color instead of zone color, and tap inspection is disabled
+  (see [multi-device-recording.md](multi-device-recording.md))
 - **Tap inspection**: tapping the plot shows a vertical line at that timestamp
   and a top label with the interpolated BPM value at that x position; tapping
   the label dismisses the line and label
@@ -248,3 +289,18 @@ Show:
 
 Zone colors are unlocked once max HR is set. The settings screen makes this
 visible with a short prompt when max HR is absent.
+
+### Advanced
+
+Collapsible/secondary section with developer and power-user options:
+
+- **Source on GitHub** - opens the repo in a browser
+- **Export database** - downloads a backup file of the current database
+- **Restore from database** - replaces the current database with a user-selected
+  backup file
+- **Export logs** - downloads a log file to share with the devs
+- **Fake heart-rate device** — offer a simulated strap when starting a
+  recording, for testing without hardware
+- **Record from multiple devices** — track more than one heart-rate strap in a
+  single session; unlocks multi-selection in the picker (see
+  [multi-device-recording.md](multi-device-recording.md))
