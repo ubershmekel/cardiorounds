@@ -1,4 +1,4 @@
-import '../db/database.dart' show SampleRow;
+import '../db/database.dart' show HrSampleRow;
 import 'zones.dart';
 
 /// Total time spent in each zone over a sample series, plus time where the
@@ -20,7 +20,7 @@ class ZoneTimes {
 /// If [windowStartMs] / [windowEndMs] are non-null, only samples inside the
 /// window are considered.
 ZoneTimes computeZoneTimes(
-  List<SampleRow> samples,
+  List<HrSampleRow> samples,
   ZoneSetup setup, {
   int? windowStartMs,
   int? windowEndMs,

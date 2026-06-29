@@ -46,14 +46,17 @@ void main() {
   group('AppDatabase.lastSampleTMs', () {
     late AppDatabase db;
     late int activityId;
+    late int hrSetId;
 
     setUp(() async {
       db = AppDatabase.forTesting(NativeDatabase.memory());
       final athlete = await db.ensureDefaultAthlete();
-      activityId = await db.startActivity(
+      final started = await db.startActivity(
         athleteId: athlete.id,
         startedAtMs: 1700000000000,
       );
+      activityId = started.activityId;
+      hrSetId = started.hrSetId;
     });
 
     tearDown(() async {
@@ -65,9 +68,9 @@ void main() {
     });
 
     test('returns the greatest tMs across samples', () async {
-      await db.insertSample(activityId: activityId, tMs: 1000, hr: 100);
-      await db.insertSample(activityId: activityId, tMs: 5000, hr: 120);
-      await db.insertSample(activityId: activityId, tMs: 3000, hr: 110);
+      await db.insertHrSample(setId: hrSetId, tMs: 1000, hr: 100);
+      await db.insertHrSample(setId: hrSetId, tMs: 5000, hr: 120);
+      await db.insertHrSample(setId: hrSetId, tMs: 3000, hr: 110);
 
       expect(await db.lastSampleTMs(activityId), 5000);
     });

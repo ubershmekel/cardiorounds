@@ -76,10 +76,11 @@ class FailStartActivityDb extends AppDatabase {
   FailStartActivityDb() : super.forTesting(NativeDatabase.memory());
 
   @override
-  Future<int> startActivity({
+  Future<StartedActivity> startActivity({
     required int athleteId,
     required int startedAtMs,
     String? sportType,
+    int? deviceId,
   }) async {
     throw Exception('boom');
   }

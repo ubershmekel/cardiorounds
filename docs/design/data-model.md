@@ -21,7 +21,6 @@ CREATE TABLE devices (
 CREATE TABLE activities (
   id INTEGER PRIMARY KEY,
   athlete_id INTEGER NOT NULL,
-  device_id INTEGER,               -- NULL if device was deleted
   started_at_ms INTEGER NOT NULL,
   duration_ms INTEGER NOT NULL,
 
@@ -33,31 +32,62 @@ CREATE TABLE activities (
   shape_end   INTEGER,             -- 0-9 load value for the final third
 
   created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL,
-
-  FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL
+  updated_at_ms INTEGER NOT NULL
 );
 
-CREATE TABLE samples (
+-- One activity (session) fans out to many sample_sets: one per device, per
+-- signal type. A single-device HR recording has exactly one sample_set with
+-- kind='hr'. The device association lives here (not on activities) so an
+-- activity can span multiple devices.
+CREATE TABLE sample_sets (
+  id INTEGER PRIMARY KEY,
   activity_id INTEGER NOT NULL,
+  device_id INTEGER,               -- NULL if device was deleted
+  kind TEXT NOT NULL,              -- 'hr' (future: 'location', 'spo2', ...)
+  -- label / color / athlete_id land here when multi-athlete / multi-signal UI
+  -- needs them; all additive, no sample-grain migration.
+
+  FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+  FOREIGN KEY (device_id)  REFERENCES devices(id)    ON DELETE SET NULL
+);
+
+CREATE INDEX sample_sets_activity_kind_idx
+ON sample_sets(activity_id, kind, id);
+
+-- One known device contributes at most one set of a given kind per activity, so
+-- a mid-session disconnect/reconnect resumes the SAME set (the gap is just NULL
+-- hr samples) rather than starting a new one. NULL device_id is exempt.
+CREATE UNIQUE INDEX sample_sets_activity_device_kind_unique
+ON sample_sets(activity_id, device_id, kind)
+WHERE device_id IS NOT NULL;
+
+-- Heart-rate samples. Each signal type gets its own *_samples table because
+-- their value columns differ (an HR strap has no GPS). Future signals follow
+-- the same shape: (set_id, t_ms, <value columns>), PRIMARY KEY (set_id, t_ms).
+--
+--   CREATE TABLE location_samples (
+--     set_id INTEGER NOT NULL,
+--     t_ms INTEGER NOT NULL,
+--     lat_e7 INTEGER,        -- latitude * 10,000,000
+--     lon_e7 INTEGER,        -- longitude * 10,000,000
+--     altitude_cm INTEGER,  -- meters * 100
+--     PRIMARY KEY (set_id, t_ms),
+--     FOREIGN KEY (set_id) REFERENCES sample_sets(id) ON DELETE CASCADE
+--   ) WITHOUT ROWID;
+CREATE TABLE hr_samples (
+  set_id INTEGER NOT NULL,
   t_ms INTEGER NOT NULL,
-
   hr INTEGER,              -- bpm; NULL means signal was lost at this timestamp
-  -- lat_e7 INTEGER,          -- latitude * 10,000,000
-  -- lon_e7 INTEGER,          -- longitude * 10,000,000
-  -- altitude_cm INTEGER,     -- meters * 100
-  -- speed_cm_s INTEGER,      -- m/s * 100
-  -- cadence INTEGER,
 
-  PRIMARY KEY (activity_id, t_ms),
-  FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+  PRIMARY KEY (set_id, t_ms),
+  FOREIGN KEY (set_id) REFERENCES sample_sets(id) ON DELETE CASCADE
 ) WITHOUT ROWID;
 
 -- WITHOUT ROWID tables use the PRIMARY KEY as their clustered B-tree, so this
 -- index is redundant. Kept here explicitly to document that queries on
--- (activity_id, t_ms) are always fast.
-CREATE INDEX samples_activity_time_idx
-ON samples(activity_id, t_ms);
+-- (set_id, t_ms) are always fast.
+CREATE INDEX hr_samples_set_time_idx
+ON hr_samples(set_id, t_ms);
 
 CREATE TABLE markers (
   id INTEGER PRIMARY KEY,
@@ -74,6 +104,33 @@ CREATE INDEX markers_activity_time_idx
 ON markers(activity_id, t_ms);
 ```
 
+### Sample sets (multi-device, multi-signal)
+
+A `sample_set` is one time series of one signal type from one source (device)
+within an activity. This is the grain that lets a single session record from
+several HR devices at once, and leaves room for other signals (location, SpO2,
+elevation) without reworking how samples are stored.
+
+- **`kind` lives on the parent** so we can list "every HR stream in this activity"
+  without touching child tables. Which `*_samples` table a set's rows live in is
+  convention keyed off `kind`, not an enforced foreign key. We deliberately do
+  *not* add `CHECK (kind IN (...))` — a hard check would force a table rebuild
+  every time a new signal kind is introduced.
+- **Per-stream athlete is intentionally deferred.** A second device may be a
+  second sensor on the same athlete *or* a second person in a group session. When
+  that distinction needs storage, add a nullable `sample_sets.athlete_id`; no
+  sample table changes.
+- **Device deletion stays graceful.** `device_id` is on `sample_sets` and off the
+  sample primary key, so `ON DELETE SET NULL` still works. (Putting `device_id`
+  in a `WITHOUT ROWID` sample PK was rejected: PK columns cannot be NULL.)
+
+### Activity-level shape with multiple HR sets
+
+`shape_start` / `shape_mid` / `shape_end` are computed from the **primary HR set
+only** (the first `kind='hr'` set, i.e. lowest `sample_sets.id`). Aggregating
+across multiple HR sets would mix duplicate timestamps from different devices and
+corrupt the thirds. If per-stream shape is ever needed it moves to `sample_sets`.
+
 ### Marker kinds
 
 A marker with `duration_ms = NULL` is a point in time. A marker with a non-NULL
@@ -86,6 +143,12 @@ A marker with `duration_ms = NULL` is a point in time. A marker with a non-NULL
 | `recovery` | span  | A detected recovery event (e.g. Z5 → Z3 drop).                                                                                              |
 | `moment`   | point | Freeform tap during recording, with optional `name`.                                                                                        |
 
+Markers are **activity-level** (one timeline per session). This is correct for
+`workout`, and acceptable for `round` / `recovery` while sets share a clock. If a
+single activity ever represents multiple people, analysis markers (`recovery`,
+auto-`round`) gain a nullable `set_id` for per-stream scope; until then we don't
+generate per-person markers.
+
 ### Settings storage
 
 `max_heartrate` and `resting_heartrate` are stored on the `athletes` row. The UI
@@ -97,6 +160,32 @@ painful migration later.
 
 The load score (extra beats above resting HR) is computed over the `workout`
 span marker window when one exists, otherwise over the full `duration_ms`.
+
+### Migration v1 → v2 (introduce `sample_sets`)
+
+v1 stored one implicit HR stream per activity (`activities.device_id` +
+`samples` keyed by `activity_id`). v2 splits that into `sample_sets` + `hr_samples`:
+
+```sql
+-- One HR set per existing activity. Reuse the activity id as the set id so the
+-- sample copy below is a trivial 1:1 map with no lookup table.
+INSERT INTO sample_sets (id, activity_id, device_id, kind)
+SELECT id, id, device_id, 'hr' FROM activities;
+
+INSERT INTO hr_samples (set_id, t_ms, hr)
+SELECT activity_id, t_ms, hr FROM samples;
+```
+
+Reusing `id` is a **one-time migration convenience, not an invariant**: new
+activities get autoincremented set ids that won't equal their activity id, so no
+query or display code may assume `set_id == activity_id`.
+
+`samples` is rebuilt, not renamed — its primary key and foreign key both change
+from `activity_id` to `set_id`, which `ALTER TABLE ... RENAME` cannot do. Drop
+`activities.device_id` in the same migration (a table rebuild). Run the schema
+changes with foreign keys disabled, then `PRAGMA foreign_key_check` before
+re-enabling, and cover the whole path with a migration test from a real v1
+schema fixture.
 
 ## Files
 

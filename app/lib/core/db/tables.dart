@@ -22,10 +22,6 @@ class Devices extends Table {
 class Activities extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get athleteId => integer().named('athlete_id')();
-  IntColumn get deviceId => integer()
-      .nullable()
-      .named('device_id')
-      .references(Devices, #id, onDelete: KeyAction.setNull)();
   IntColumn get startedAtMs => integer().named('started_at_ms')();
   IntColumn get durationMs => integer().named('duration_ms')();
   TextColumn get name => text().nullable()();
@@ -38,16 +34,32 @@ class Activities extends Table {
   IntColumn get updatedAtMs => integer().named('updated_at_ms')();
 }
 
-@DataClassName('SampleRow')
-class Samples extends Table {
+/// One time series of one signal type (`kind`) from one source (device) within
+/// an activity. A single-device HR recording has exactly one set, kind 'hr'.
+/// The device association lives here, not on activities, so one session can span
+/// multiple devices. See docs/design/data-model.md.
+class SampleSets extends Table {
+  IntColumn get id => integer().autoIncrement()();
   IntColumn get activityId => integer()
       .named('activity_id')
       .references(Activities, #id, onDelete: KeyAction.cascade)();
+  IntColumn get deviceId => integer()
+      .nullable()
+      .named('device_id')
+      .references(Devices, #id, onDelete: KeyAction.setNull)();
+  TextColumn get kind => text()(); // 'hr' (future: 'location', 'spo2', ...)
+}
+
+@DataClassName('HrSampleRow')
+class HrSamples extends Table {
+  IntColumn get setId => integer()
+      .named('set_id')
+      .references(SampleSets, #id, onDelete: KeyAction.cascade)();
   IntColumn get tMs => integer().named('t_ms')();
   IntColumn get hr => integer().nullable()();
 
   @override
-  Set<Column> get primaryKey => {activityId, tMs};
+  Set<Column> get primaryKey => {setId, tMs};
 
   @override
   bool get withoutRowId => true;

@@ -124,7 +124,7 @@ class _ActivityBody extends StatelessWidget {
   });
 
   final Activity activity;
-  final List<SampleRow> rows;
+  final List<HrSampleRow> rows;
   final Marker? workoutMarker;
   final bool editing;
   final ZoneSetup? zoneSetup;

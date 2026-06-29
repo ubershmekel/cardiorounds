@@ -110,6 +110,10 @@ class RecordingController extends StateNotifier<RecordingState> {
       startedAt: state.startedAt,
     );
     _updateLiveActivity();
+    // Resolve the activity's primary HR set once; samples insert against it.
+    // Created by startActivity (fresh) or the original start (resume), so it
+    // always exists by the time recording begins.
+    _hrSetId = db.primaryHrSetId(activityId);
     _sub = source.samples.listen(_onSample);
     _statusSub = source.status.listen(_onSourceStatus);
 
@@ -153,6 +157,7 @@ class RecordingController extends StateNotifier<RecordingState> {
   final DateTime _started;
   final ZoneSetup? _zoneSetup;
   final RecordingLiveActivity _liveActivity = const RecordingLiveActivity();
+  late final Future<int> _hrSetId;
   late final StreamSubscription<HrSample> _sub;
   late final StreamSubscription<HrSourceStatus> _statusSub;
   late final Timer _ticker;
@@ -187,8 +192,8 @@ class RecordingController extends StateNotifier<RecordingState> {
     }
     _sampleCount++;
     final tMs = sample.at.difference(_started).inMilliseconds;
-    await db.insertSample(
-      activityId: state.activityId,
+    await db.insertHrSample(
+      setId: await _hrSetId,
       tMs: tMs,
       hr: sample.bpm,
     );

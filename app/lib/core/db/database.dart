@@ -4,13 +4,22 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../app_logger.dart';
 import 'tables.dart';
 
 part 'database.g.dart';
 
 const String kDatabaseFileName = 'cardio_rounds';
 
-@DriftDatabase(tables: [Athletes, Devices, Activities, Samples, Markers])
+/// Result of starting a recording: the new activity plus its primary HR
+/// [SampleSet]. Both ids are returned so callers don't re-query the set.
+class StartedActivity {
+  const StartedActivity({required this.activityId, required this.hrSetId});
+  final int activityId;
+  final int hrSetId;
+}
+
+@DriftDatabase(tables: [Athletes, Devices, Activities, SampleSets, HrSamples, Markers])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting(super.executor);
@@ -21,7 +30,95 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) async {
+      appLog('Migration', 'Creating fresh database schema v$schemaVersion');
+      await m.createAll();
+      await _createSampleSetIndexes();
+    },
+    onUpgrade: (m, from, to) async {
+      appLog('Migration', 'Upgrading database schema from v$from to v$to');
+      try {
+        // Foreign keys can't be toggled inside a transaction, so disable them in
+        // an exclusive block around the migration and re-check at the end.
+        await exclusively(() async {
+          await customStatement('PRAGMA foreign_keys = OFF');
+          await transaction(() async {
+            if (from < 2) {
+              await m.createTable(sampleSets);
+              await m.createTable(hrSamples);
+              // One HR set per existing activity; reuse the activity id as the
+              // set id so the sample copy is a trivial 1:1 map. This is a
+              // one-time convenience, NOT an invariant — new sets get
+              // autoincremented ids.
+              await customStatement(
+                "INSERT INTO sample_sets (id, activity_id, device_id, kind) "
+                "SELECT id, id, device_id, 'hr' FROM activities",
+              );
+              await customStatement(
+                'INSERT INTO hr_samples (set_id, t_ms, hr) '
+                'SELECT activity_id, t_ms, hr FROM samples',
+              );
+              await m.deleteTable('samples');
+              // Drop activities.device_id (it moved to sample_sets); rebuilds
+              // the table from the current schema.
+              await m.alterTable(TableMigration(activities));
+              await _createSampleSetIndexes();
+              final sets = await customSelect(
+                'SELECT COUNT(*) AS c FROM sample_sets',
+              ).getSingle();
+              final hrRows = await customSelect(
+                'SELECT COUNT(*) AS c FROM hr_samples',
+              ).getSingle();
+              appLog(
+                'Migration',
+                'v2: created ${sets.data['c']} sample_sets, '
+                    'copied ${hrRows.data['c']} hr_samples',
+              );
+            }
+          });
+          // customSelect (not customStatement) so the result rows are read and a
+          // violation actually fails the migration instead of opening a bad DB.
+          final violations = await customSelect(
+            'PRAGMA foreign_key_check',
+          ).get();
+          if (violations.isNotEmpty) {
+            throw StateError(
+              'Migration to v2 left foreign key violations: '
+              '${violations.map((r) => r.data).toList()}',
+            );
+          }
+        });
+        appLog('Migration', 'Schema upgrade to v$to complete');
+      } catch (e) {
+        // Log loudly: the migration runs in a transaction, so it rolled back and
+        // the v$from data is intact, but the app can't open until this is fixed.
+        appLog('Migration', 'Schema upgrade from v$from to v$to FAILED: $e');
+        rethrow;
+      }
+    },
+    beforeOpen: (details) async {
+      await customStatement('PRAGMA foreign_keys = ON');
+    },
+  );
+
+  Future<void> _createSampleSetIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS sample_sets_activity_kind_idx '
+      'ON sample_sets (activity_id, kind, id)',
+    );
+    // One known device contributes at most one set of a given kind per activity,
+    // so a reconnect resumes the same set. NULL device_id is exempt.
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS sample_sets_activity_device_kind_unique '
+      'ON sample_sets (activity_id, device_id, kind) WHERE device_id IS NOT NULL',
+    );
+    // No index on hr_samples(set_id, t_ms): it's WITHOUT ROWID with that exact
+    // primary key, so the PK already is the clustered index.
+  }
 
   Future<Athlete> ensureDefaultAthlete() async {
     final existing = await (select(athletes)..limit(1)).getSingleOrNull();
@@ -76,28 +173,65 @@ class AppDatabase extends _$AppDatabase {
     )..where((a) => a.id.equals(activityId))).watchSingle();
   }
 
-  Stream<List<SampleRow>> watchSamples(int activityId) {
-    return (select(samples)
-          ..where((s) => s.activityId.equals(activityId))
+  /// Samples of the activity's primary (first) HR set. With multiple HR sets per
+  /// activity (future multi-device), the chart layer chooses which to show; for
+  /// now there is exactly one.
+  Stream<List<HrSampleRow>> watchSamples(int activityId) {
+    final setIds = selectOnly(sampleSets)
+      ..addColumns([sampleSets.id])
+      ..where(
+        sampleSets.activityId.equals(activityId) & sampleSets.kind.equals('hr'),
+      )
+      ..orderBy([OrderingTerm.asc(sampleSets.id)])
+      ..limit(1);
+    return (select(hrSamples)
+          ..where((s) => s.setId.isInQuery(setIds))
           ..orderBy([(s) => OrderingTerm.asc(s.tMs)]))
         .watch();
   }
 
-  Future<int> startActivity({
+  /// The id of the activity's primary (first) HR set.
+  Future<int> primaryHrSetId(int activityId) async {
+    final row =
+        await (select(sampleSets)
+              ..where(
+                (s) =>
+                    s.activityId.equals(activityId) & s.kind.equals('hr'),
+              )
+              ..orderBy([(s) => OrderingTerm.asc(s.id)])
+              ..limit(1))
+            .getSingle();
+    return row.id;
+  }
+
+  /// Creates an activity and its primary HR set in one transaction. [deviceId]
+  /// links the recording strap (null for the fake/debug source).
+  Future<StartedActivity> startActivity({
     required int athleteId,
     required int startedAtMs,
     String? sportType,
+    int? deviceId,
   }) {
-    return into(activities).insert(
-      ActivitiesCompanion.insert(
-        athleteId: athleteId,
-        startedAtMs: startedAtMs,
-        durationMs: 0,
-        sportType: Value(sportType),
-        createdAtMs: startedAtMs,
-        updatedAtMs: startedAtMs,
-      ),
-    );
+    return transaction(() async {
+      final activityId = await into(activities).insert(
+        ActivitiesCompanion.insert(
+          athleteId: athleteId,
+          startedAtMs: startedAtMs,
+          durationMs: 0,
+          sportType: Value(sportType),
+          createdAtMs: startedAtMs,
+          updatedAtMs: startedAtMs,
+        ),
+      );
+      final hrSetId = await into(sampleSets).insert(
+        SampleSetsCompanion.insert(
+          activityId: activityId,
+          kind: 'hr',
+          deviceId: Value(deviceId),
+        ),
+      );
+      return StartedActivity(activityId: activityId, hrSetId: hrSetId);
+    });
   }
 
   Future<void> updateActivity({
@@ -142,9 +276,12 @@ class AppDatabase extends _$AppDatabase {
   /// writes them to shapeStart / shapeMid / shapeEnd. Call after finalizing or
   /// after the trim marker changes.
   Future<void> computeAndSaveShape(int activityId) async {
+    // Shape is computed from the primary HR set only; aggregating across
+    // multiple HR sets would interleave duplicate timestamps. See data-model.md.
+    final setId = await primaryHrSetId(activityId);
     final sampleRows =
-        await (select(samples)
-              ..where((s) => s.activityId.equals(activityId))
+        await (select(hrSamples)
+              ..where((s) => s.setId.equals(setId))
               ..orderBy([(s) => OrderingTerm.asc(s.tMs)]))
             .get();
 
@@ -202,22 +339,23 @@ class AppDatabase extends _$AppDatabase {
   /// The tMs of the most recent sample, or null if the activity has none. Used
   /// to finalize a crashed recording's duration when the user discards it.
   Future<int?> lastSampleTMs(int activityId) async {
+    final setId = await primaryHrSetId(activityId);
     final row =
-        await (select(samples)
-              ..where((s) => s.activityId.equals(activityId))
+        await (select(hrSamples)
+              ..where((s) => s.setId.equals(setId))
               ..orderBy([(s) => OrderingTerm.desc(s.tMs)])
               ..limit(1))
             .getSingleOrNull();
     return row?.tMs;
   }
 
-  Future<void> insertSample({
-    required int activityId,
+  Future<void> insertHrSample({
+    required int setId,
     required int tMs,
     int? hr,
   }) {
-    return into(samples).insert(
-      SamplesCompanion.insert(activityId: activityId, tMs: tMs, hr: Value(hr)),
+    return into(hrSamples).insert(
+      HrSamplesCompanion.insert(setId: setId, tMs: tMs, hr: Value(hr)),
     );
   }
 

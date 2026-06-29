@@ -54,7 +54,7 @@ final distinctSportTypesProvider = FutureProvider.autoDispose<List<String>>((
   return ref.watch(databaseProvider).distinctSportTypes();
 });
 
-final samplesProvider = StreamProvider.family<List<SampleRow>, int>((
+final samplesProvider = StreamProvider.family<List<HrSampleRow>, int>((
   ref,
   activityId,
 ) {

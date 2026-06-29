@@ -267,11 +267,16 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       // here leaves the live preview connection intact and Start retryable.
       await _scanner?.stop();
       final db = ref.read(databaseProvider);
+      int? deviceId;
       if (!entry.isFake) {
-        await db.upsertDevice(platformId: entry.id, name: source.deviceName);
+        final device = await db.upsertDevice(
+          platformId: entry.id,
+          name: source.deviceName,
+        );
+        deviceId = device.id;
       }
       final athlete = await db.ensureDefaultAthlete();
-      final activityId = await _createActivity(athlete.id);
+      final activityId = await _createActivity(athlete.id, deviceId);
       // Handoff: from here the recording controller owns the connection — no
       // disconnect, no reconnect. Stop listening before relinquishing.
       await _previewSampleSub?.cancel();
@@ -293,15 +298,17 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     }
   }
 
-  Future<int> _createActivity(int athleteId) async {
+  Future<int> _createActivity(int athleteId, int? deviceId) async {
     final db = ref.read(databaseProvider);
     final now = DateTime.now().millisecondsSinceEpoch;
     final sport = _sportTypeController.text.trim();
-    return db.startActivity(
+    final started = await db.startActivity(
       athleteId: athleteId,
       startedAtMs: now,
       sportType: sport.isEmpty ? null : sport,
+      deviceId: deviceId,
     );
+    return started.activityId;
   }
 
   @override

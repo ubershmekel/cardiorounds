@@ -37,6 +37,13 @@
 
 - App logging is centralized in `app/lib/core/app_logger.dart`; use
   `appLog(tag, message)` instead of ad hoc `print` or `debugPrint` calls.
+- Logs are the primary tool for diagnosing field issues we can't reproduce
+  locally (Bluetooth dropouts, suspended timers, crashed recordings, schema
+  migrations). Proactively `appLog` the important, hard-to-reproduce, or
+  irreversible events — lifecycle transitions, recording start/stop, device
+  connect/disconnect, and especially **database migrations** (start, row counts,
+  success, and a logged-then-rethrown failure). When something goes wrong in
+  production, the log file is often all we have.
 - Keep logger policy values as named constants near the top of
   `app_logger.dart`. Do not hide retention counts, byte limits, file names, or
   timing thresholds as literals in the middle of methods.
