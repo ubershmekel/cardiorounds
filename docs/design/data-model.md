@@ -176,12 +176,19 @@ INSERT INTO sample_sets (id, activity_id, device_id, kind)
 SELECT id, id, device_id, 'hr' FROM activities;
 
 INSERT INTO hr_samples (set_id, t_ms, hr)
-SELECT activity_id, t_ms, hr FROM samples;
+SELECT s.activity_id, s.t_ms, s.hr
+FROM samples s
+INNER JOIN activities a ON a.id = s.activity_id;
 ```
 
 Reusing `id` is a **one-time migration convenience, not an invariant**: new
 activities get autoincremented set ids that won't equal their activity id, so no
 query or display code may assume `set_id == activity_id`.
+
+The join intentionally drops orphaned v1 samples whose parent activity no longer
+exists. v1 did not consistently enable SQLite foreign key enforcement, so real
+databases can contain those rows after an activity delete; v2 cannot attach them
+to a valid `sample_sets` row.
 
 `samples` is rebuilt, not renamed — its primary key and foreign key both change
 from `activity_id` to `set_id`, which `ALTER TABLE ... RENAME` cannot do. Drop

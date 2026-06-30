@@ -71,7 +71,8 @@ AppDatabase _openMigratedFromV1() {
   );
   raw.execute(
     'INSERT INTO samples (activity_id, t_ms, hr) VALUES '
-    '(10, 1000, 100), (10, 2000, 110), (20, 500, 80)',
+    '(10, 1000, 100), (10, 2000, 110), (20, 500, 80), '
+    '(999, 1234, 60)',
   );
   raw.execute('PRAGMA user_version = 1');
   return AppDatabase.forTesting(NativeDatabase.opened(raw));
@@ -106,7 +107,7 @@ void main() {
       },
     );
 
-    test('re-points every sample to its set, losing none', () async {
+    test('re-points every reachable sample to its set', () async {
       final count = await db
           .customSelect('SELECT COUNT(*) AS c FROM hr_samples')
           .getSingle();
@@ -117,6 +118,13 @@ void main() {
 
       final samples = await db.watchSamples(10).first;
       expect(samples.map((s) => (s.tMs, s.hr)), [(1000, 100), (2000, 110)]);
+    });
+
+    test('drops orphaned v1 samples whose activity no longer exists', () async {
+      final orphan = await db
+          .customSelect('SELECT * FROM hr_samples WHERE set_id = 999')
+          .get();
+      expect(orphan, isEmpty);
     });
 
     test(

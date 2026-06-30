@@ -1,5 +1,17 @@
 # Screens
 
+## Startup states
+
+While startup work runs, the app shows a centered loading indicator. If startup
+fails, show a concise blocking error state with:
+
+- **Couldn't start Cardio Rounds**
+- A short support message, not the raw exception or stack trace
+- **Download logs** as the primary action
+- **Try again** as the secondary action
+
+The full startup error is written to app logs for support export.
+
 ## Home screen
 
 At the top you see the logo of the app and its name.

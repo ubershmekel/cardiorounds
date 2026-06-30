@@ -5,15 +5,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/app_logger.dart';
 import '../../core/build_info.dart';
-import '../../core/runtime_environment.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 import '../../core/settings/app_settings.dart';
+import '../../core/support_logs.dart';
 
 final Uri _sourceCodeUrl = Uri.parse(
   'https://github.com/ubershmekel/cardiorounds',
@@ -213,7 +211,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           OutlinedButton.icon(
             icon: const Icon(Icons.download_outlined),
             label: const Text('Export database'),
-            onPressed: () => _exportFile(
+            onPressed: () => shareSupportFile(
               context,
               getFile: AppDatabase.databaseFile,
               subject: 'Cardio Rounds database',
@@ -229,7 +227,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           OutlinedButton.icon(
             icon: const Icon(Icons.article_outlined),
             label: const Text('Export logs'),
-            onPressed: () => _exportLogs(context),
+            onPressed: () => exportSupportLogs(context),
           ),
           const SizedBox(height: 8),
           SwitchListTile(
@@ -257,19 +255,6 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           ),
         ],
       ],
-    );
-  }
-
-  Future<void> _exportLogs(BuildContext context) async {
-    try {
-      final env = await runtimeEnvironmentInfo();
-      appLog('Export', env.activityLogLabel);
-    } catch (_) {}
-    if (!context.mounted) return;
-    await _exportFile(
-      context,
-      getFile: AppLogger.instance.resolveLogFile,
-      subject: 'Cardio Rounds logs',
     );
   }
 
@@ -353,37 +338,6 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Could not open GitHub source')),
-    );
-  }
-
-  Future<void> _exportFile(
-    BuildContext context, {
-    required Future<File?> Function() getFile,
-    required String subject,
-  }) async {
-    if (kIsWeb) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$subject export not available on web')),
-      );
-      return;
-    }
-    final file = await getFile();
-    if (file == null || !await file.exists()) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('File not found')));
-      return;
-    }
-    if (!context.mounted) return;
-    final box = context.findRenderObject() as RenderBox?;
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      subject: subject,
-      sharePositionOrigin: box == null
-          ? null
-          : box.localToGlobal(Offset.zero) & box.size,
     );
   }
 }

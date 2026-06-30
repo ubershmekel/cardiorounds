@@ -83,8 +83,24 @@ class AppDatabase extends _$AppDatabase {
               );
               await customStatement(
                 'INSERT INTO hr_samples (set_id, t_ms, hr) '
-                'SELECT activity_id, t_ms, hr FROM samples',
+                'SELECT s.activity_id, s.t_ms, s.hr '
+                'FROM samples s '
+                'INNER JOIN activities a ON a.id = s.activity_id',
               );
+              // Count any orphaned samples the join dropped (parent activity
+              // gone) so a "lost data" support ticket has a number to check.
+              final orphans = await customSelect(
+                'SELECT COUNT(*) AS c FROM samples s '
+                'WHERE NOT EXISTS '
+                '(SELECT 1 FROM activities a WHERE a.id = s.activity_id)',
+              ).getSingle();
+              final orphanCount = orphans.data['c'] as int;
+              if (orphanCount > 0) {
+                appLog(
+                  'Migration',
+                  'v2: dropped $orphanCount orphaned samples with no activity',
+                );
+              }
               await m.deleteTable('samples');
               // Drop activities.device_id (it moved to sample_sets); rebuilds
               // the table from the current schema.

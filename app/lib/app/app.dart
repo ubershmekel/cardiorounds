@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/app_logger.dart';
 import '../core/db/providers.dart';
+import '../core/support_logs.dart';
 import 'router.dart';
 import 'theme.dart';
 
@@ -42,7 +44,14 @@ class _CardioRoundsAppState extends ConsumerState<CardioRoundsApp> {
       builder: (context, child) {
         return startup.when(
           loading: () => const _SplashScaffold(),
-          error: (e, _) => _ErrorScaffold(error: e),
+          error: (error, stackTrace) => _StartupErrorScaffold(
+            error: error,
+            stackTrace: stackTrace,
+            onRetry: () {
+              ref.invalidate(databaseProvider);
+              ref.invalidate(startupProvider);
+            },
+          ),
           data: (_) => _maybePortraitFrame(child),
         );
       },
@@ -59,21 +68,81 @@ class _SplashScaffold extends StatelessWidget {
   }
 }
 
-class _ErrorScaffold extends StatelessWidget {
-  const _ErrorScaffold({required this.error});
+class _StartupErrorScaffold extends StatefulWidget {
+  const _StartupErrorScaffold({
+    required this.error,
+    required this.stackTrace,
+    required this.onRetry,
+  });
 
   final Object error;
+  final StackTrace stackTrace;
+  final VoidCallback onRetry;
+
+  @override
+  State<_StartupErrorScaffold> createState() => _StartupErrorScaffoldState();
+}
+
+class _StartupErrorScaffoldState extends State<_StartupErrorScaffold> {
+  @override
+  void initState() {
+    super.initState();
+    appLog(
+      'Startup',
+      'Failed to start: ${widget.error}\n${widget.stackTrace}',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      body: Center(
+      body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            'Failed to start: $error',
-            style: Theme.of(context).textTheme.bodyLarge,
-            textAlign: TextAlign.center,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: scheme.error,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Couldn't start Cardio Rounds",
+                    style: textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'The app hit a startup problem. Download the logs and send '
+                    'them for support.',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: () => exportSupportLogs(context),
+                    icon: const Icon(Icons.article_outlined),
+                    label: const Text('Download logs'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: widget.onRetry,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Try again'),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
