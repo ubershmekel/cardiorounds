@@ -152,7 +152,13 @@ void main() {
     );
     return UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        // The default Material splash (InkSparkle) loads ink_sparkle.frag, whose
+        // precompiled shader the test engine can't decode; an ink-less splash
+        // keeps taps working without touching that asset.
+        theme: ThemeData(splashFactory: NoSplash.splashFactory),
+        routerConfig: router,
+      ),
     );
   }
 
