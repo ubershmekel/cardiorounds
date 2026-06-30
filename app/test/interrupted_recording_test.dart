@@ -5,12 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('InterruptedRecording JSON', () {
-    test('round-trips through toJson/fromJson', () {
+    test('round-trips multiple devices through toJson/fromJson', () {
       const original = InterruptedRecording(
         activityId: 7,
         startedAtMs: 1700000000000,
-        devicePlatformId: 'strap-1',
-        deviceName: 'Polar H10',
+        devices: [
+          RecordedDevice(platformId: 'strap-1', name: 'Polar H10'),
+          RecordedDevice(platformId: 'strap-2', name: 'Wahoo Tickr'),
+        ],
       );
 
       final restored = InterruptedRecording.fromJson(original.toJson());
@@ -18,16 +20,35 @@ void main() {
       expect(restored, isNotNull);
       expect(restored!.activityId, 7);
       expect(restored.startedAtMs, 1700000000000);
-      expect(restored.devicePlatformId, 'strap-1');
-      expect(restored.deviceName, 'Polar H10');
+      expect(restored.devices.map((d) => (d.platformId, d.name)), [
+        ('strap-1', 'Polar H10'),
+        ('strap-2', 'Wahoo Tickr'),
+      ]);
     });
 
-    test('returns null when a field is missing', () {
+    test('reads a legacy single-device sentinel as a one-device list', () {
       final json = {
         'activityId': 7,
         'startedAtMs': 1700000000000,
+        'devicePlatformId': 'strap-1',
         'deviceName': 'Polar H10',
-        // devicePlatformId omitted
+      };
+
+      final restored = InterruptedRecording.fromJson(json);
+
+      expect(restored, isNotNull);
+      expect(restored!.devices, hasLength(1));
+      expect(restored.devices.single.platformId, 'strap-1');
+      expect(restored.devices.single.name, 'Polar H10');
+    });
+
+    test('returns null when a device entry is malformed', () {
+      final json = {
+        'activityId': 7,
+        'startedAtMs': 1700000000000,
+        'devices': [
+          {'platformId': 'strap-1'}, // name missing
+        ],
       };
       expect(InterruptedRecording.fromJson(json), isNull);
     });
@@ -36,8 +57,9 @@ void main() {
       final json = {
         'activityId': '7', // should be int
         'startedAtMs': 1700000000000,
-        'devicePlatformId': 'strap-1',
-        'deviceName': 'Polar H10',
+        'devices': [
+          {'platformId': 'strap-1', 'name': 'Polar H10'},
+        ],
       };
       expect(InterruptedRecording.fromJson(json), isNull);
     });

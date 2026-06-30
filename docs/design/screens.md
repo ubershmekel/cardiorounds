@@ -62,7 +62,9 @@ background scanning. Each row shows:
 
 When the "Fake heart-rate device" toggle is on (Advanced settings), a
 **simulated strap** appears as the first row in this same list and behaves like
-any other selectable device.
+any other selectable device. With multiple-device recording also on, several
+distinct simulated straps (with different heart rates) are offered so the flow
+can be tested without hardware.
 
 #### Multiple-device selection
 
@@ -236,7 +238,9 @@ at `/activity/:activityId`.
 For a multiple-device activity the chart draws one line per device with a legend
 (color swatch + device name), and **each device** gets its own min/avg/max and
 time-in-zone breakdown (per-device blocks, scored against the single athlete's
-zones). See [multi-device-recording.md](multi-device-recording.md).
+zones). The workout shape and load score are still shown, computed from the
+**primary** device and labelled with its name. See
+[multi-device-recording.md](multi-device-recording.md).
 
 ### Marker editing
 
@@ -260,8 +264,10 @@ converts it to a human marker.
   labels so the line remains visually dominant
 - **Line**: continuous, colored by zone (see zones.md); breaks at NULL HR gaps.
   With multiple devices the chart draws one line per device, each in a stable
-  per-device palette color instead of zone color, and tap inspection is disabled
-  (see [multi-device-recording.md](multi-device-recording.md))
+  per-device palette color instead of zone color (see
+  [multi-device-recording.md](multi-device-recording.md))
+- **Tap inspection** with multiple devices shows the shared timestamp plus one
+  BPM value per device, each tinted in its line color, with a dot on each line
 - **Tap inspection**: tapping the plot shows a vertical line at that timestamp
   and a top label with the interpolated BPM value at that x position; tapping
   the label dismisses the line and label

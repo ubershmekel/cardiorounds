@@ -26,6 +26,7 @@ class _Entry {
     this.rssi,
     this.isKnown = false,
     this.isFake = false,
+    this.fakeCenterBpm = 132,
   });
 
   final String id;
@@ -33,6 +34,22 @@ class _Entry {
   final int? rssi;
   final bool isKnown;
   final bool isFake;
+  // Distinct resting center per simulated strap so multiple fake lines differ.
+  final int fakeCenterBpm;
+}
+
+/// A selected device's live preview connection (handed straight to recording on
+/// Start). In single-device mode at most one of these exists; in multi-device
+/// mode there is one per selected device.
+class _Selection {
+  _Selection(this.entry);
+
+  final _Entry entry;
+  HeartRateSource? source;
+  int? bpm;
+  StreamSubscription<HrSample>? sampleSub;
+  bool connecting = true;
+  String? error;
 }
 
 class ConfirmRecordScreen extends ConsumerStatefulWidget {
@@ -64,22 +81,22 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   // The known single device is auto-selected at most once per screen visit.
   bool _autoSelectConsumed = false;
 
-  // The currently-selected entry holds a live preview connection (so the user
-  // can confirm sensor contact) that is handed straight to recording on Start.
-  _Entry? _selected;
-  HeartRateSource? _previewSource;
-  int? _previewBpm;
-  StreamSubscription<HrSample>? _previewSampleSub;
-  bool _connectingPreview = false;
-  // Start tapped while the preview is still connecting; honored once ready.
+  // Selected devices, keyed by entry id, each holding a live preview connection.
+  // Single-device mode keeps at most one; multi-device mode keeps several.
+  final Map<String, _Selection> _selections = {};
+  // Start tapped while the (single) preview is still connecting; honored once
+  // ready. Multi-device mode waits for at least one device to connect instead.
   bool _startRequested = false;
-  // Committing the selected source to a new recording (full-screen spinner).
+  // Committing the selected sources to a new recording (full-screen spinner).
   bool _starting = false;
   String? _error;
 
   bool get _showFakeStrap => ref.watch(fakeHrDeviceEnabledProvider);
+  bool get _multiEnabled => ref.read(multiDeviceRecordingEnabledProvider);
 
-  bool get _busy => _connectingPreview || _startRequested || _starting;
+  bool get _busy => _startRequested || _starting;
+  bool get _hasSelection => _selections.isNotEmpty;
+  bool get _anyConnected => _selections.values.any((s) => s.source != null);
 
   @override
   void initState() {
@@ -105,7 +122,10 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   }
 
   Future<void> _startScan() async {
-    if (_scanning || _busy || _selected != null) return;
+    // Multi-device mode keeps scanning while devices are selected (you need to
+    // keep finding more); single-device mode pauses once a device is picked.
+    if (_scanning || _busy) return;
+    if (!_multiEnabled && _hasSelection) return;
     setState(() => _scanning = true);
     try {
       await _scanner?.start(timeout: _scanTimeout);
@@ -151,7 +171,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   }
 
   void _maybeAutoSelect() {
-    if (_autoSelectConsumed || _selected != null || _onlyKnownDevice == null) {
+    if (_autoSelectConsumed || _hasSelection || _onlyKnownDevice == null) {
       return;
     }
     final device = _devicesById[_onlyKnownDevice!.platformId];
@@ -167,12 +187,20 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     );
   }
 
-  Future<void> _disposePreview() async {
-    await _previewSampleSub?.cancel();
-    _previewSampleSub = null;
-    final source = _previewSource;
-    _previewSource = null;
+  Future<void> _disposeSelection(_Selection selection) async {
+    await selection.sampleSub?.cancel();
+    selection.sampleSub = null;
+    final source = selection.source;
+    selection.source = null;
     await source?.dispose();
+  }
+
+  Future<void> _disposeAllSelections() async {
+    final all = _selections.values.toList();
+    _selections.clear();
+    for (final selection in all) {
+      await _disposeSelection(selection);
+    }
   }
 
   Future<void> _select(_Entry entry) async {
@@ -181,73 +209,92 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     FocusScope.of(context).unfocus();
     // Any interaction consumes the one-shot auto-selection.
     _autoSelectConsumed = true;
-    // Tapping the selected row again deselects it.
-    if (_selected?.id == entry.id) {
-      await _deselect();
+
+    // Tapping a selected row deselects just that device.
+    if (_selections.containsKey(entry.id)) {
+      await _deselect(entry.id);
       return;
     }
 
-    await _disposePreview();
+    final multi = _multiEnabled;
+    if (!multi) {
+      // Single-device: replace any current selection and pause scanning.
+      await _disposeAllSelections();
+      await _scanner?.stop();
+    }
+
+    final selection = _Selection(entry);
     setState(() {
-      _selected = entry;
-      _previewBpm = null;
-      _connectingPreview = true;
-      _startRequested = false;
+      _selections[entry.id] = selection;
       _error = null;
     });
-    await _scanner?.stop();
+
     try {
       final source = entry.isFake
-          ? FakeHeartRateSource()
+          ? FakeHeartRateSource(
+              deviceName: entry.name,
+              centerBpm: entry.fakeCenterBpm,
+            )
           : await ref.read(hrConnectorProvider)(entry.id, entry.name);
-      // The selection may have changed (or the screen closed) while connecting.
-      if (!mounted || _selected?.id != entry.id) {
+      // The selection may have been removed (or the screen closed) while
+      // connecting.
+      if (!mounted || !_selections.containsKey(entry.id)) {
         await source.dispose();
         return;
       }
       setState(() {
-        _previewSource = source;
-        _connectingPreview = false;
+        selection.source = source;
+        selection.connecting = false;
       });
-      _previewSampleSub = source.samples.listen((sample) {
+      selection.sampleSub = source.samples.listen((sample) {
         if (!mounted) return;
-        setState(() => _previewBpm = sample.bpm);
+        setState(() => selection.bpm = sample.bpm);
       });
-      // Honor a Start that was tapped before the connection was ready.
-      if (_startRequested) {
+      // Honor a single-device Start tapped before the connection was ready.
+      if (_startRequested && !multi) {
         _startRequested = false;
         await _commitStart();
       }
     } catch (e) {
-      if (!mounted || _selected?.id != entry.id) return;
-      setState(() {
-        _error = 'Could not connect: $e';
-        _selected = null;
-        _connectingPreview = false;
-        _startRequested = false;
-      });
-      await _startScan();
+      if (!mounted || !_selections.containsKey(entry.id)) return;
+      if (multi) {
+        // Keep the row but show its error; the other devices are unaffected.
+        setState(() {
+          selection.connecting = false;
+          selection.error = 'Could not connect';
+        });
+      } else {
+        setState(() {
+          _selections.remove(entry.id);
+          _error = 'Could not connect: $e';
+          _startRequested = false;
+        });
+        await _startScan();
+      }
     }
   }
 
-  Future<void> _deselect() async {
-    await _disposePreview();
+  Future<void> _deselect(String id) async {
+    final selection = _selections.remove(id);
+    if (selection != null) await _disposeSelection(selection);
     if (!mounted) return;
-    setState(() {
-      _selected = null;
-      _previewBpm = null;
-      _connectingPreview = false;
-      _startRequested = false;
-    });
-    _startScan();
+    setState(() {});
+    // Single-device mode pauses scanning while selected; resume when cleared.
+    if (!_multiEnabled && _selections.isEmpty) _startScan();
   }
 
   void _onStart() {
-    final entry = _selected;
-    if (entry == null || _starting || _startRequested) return;
-    if (_connectingPreview || _previewSource == null) {
-      // Don't make the user wait for pairing — remember the intent and fire as
-      // soon as the preview connection is ready.
+    if (_starting || _startRequested || !_hasSelection) return;
+    if (_multiEnabled) {
+      // Commit the devices that have connected; Start is disabled until at
+      // least one has (see build).
+      if (_anyConnected) _commitStart();
+      return;
+    }
+    // Single-device: don't make the user wait for pairing — remember the intent
+    // and fire as soon as the preview connection is ready.
+    final selection = _selections.values.first;
+    if (selection.connecting || selection.source == null) {
       setState(() => _startRequested = true);
       return;
     }
@@ -255,41 +302,60 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   }
 
   Future<void> _commitStart() async {
-    final entry = _selected;
-    final source = _previewSource;
-    if (entry == null || source == null) return;
+    final ready = _selections.values.where((s) => s.source != null).toList();
+    if (ready.isEmpty) return;
     setState(() {
       _starting = true;
       _error = null;
     });
     try {
-      // Do all the fallible prep while we still own the source, so a failure
-      // here leaves the live preview connection intact and Start retryable.
+      // Do all the fallible prep while we still own the sources, so a failure
+      // here leaves the live preview connections intact and Start retryable.
       await _scanner?.stop();
       final db = ref.read(databaseProvider);
-      int? deviceId;
-      if (!entry.isFake) {
-        final device = await db.upsertDevice(
-          platformId: entry.id,
-          name: source.deviceName,
-        );
-        deviceId = device.id;
+      // One device id per selected source, in order, so the returned set ids
+      // line up. Fake source -> null device.
+      final deviceIds = <int?>[];
+      for (final s in ready) {
+        if (s.entry.isFake) {
+          deviceIds.add(null);
+        } else {
+          final device = await db.upsertDevice(
+            platformId: s.entry.id,
+            name: s.source!.deviceName,
+          );
+          deviceIds.add(device.id);
+        }
       }
       final athlete = await db.ensureDefaultAthlete();
-      final activityId = await _createActivity(athlete.id, deviceId);
-      // Handoff: from here the recording controller owns the connection — no
-      // disconnect, no reconnect. Stop listening before relinquishing.
-      await _previewSampleSub?.cancel();
-      _previewSampleSub = null;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final sport = _sportTypeController.text.trim();
+      final started = await db.startActivityWithDevices(
+        athleteId: athlete.id,
+        startedAtMs: now,
+        sportType: sport.isEmpty ? null : sport,
+        deviceIds: deviceIds,
+      );
+      // Handoff: from here the recording controller owns the connections — no
+      // disconnect, no reconnect. Stop our preview listeners before relinquishing.
+      final sources = <RecordingSource>[];
+      for (var i = 0; i < ready.length; i++) {
+        await ready[i].sampleSub?.cancel();
+        ready[i].sampleSub = null;
+        sources.add(
+          RecordingSource(source: ready[i].source!, setId: started.hrSetIds[i]),
+        );
+      }
       // If the screen is gone, keep ownership (dispose() will tear it down).
       if (!mounted) return;
-      _previewSource = null;
-      ref.read(pendingHrSourceProvider.notifier).state = source;
-      ref.read(activeRecordingIdProvider.notifier).state = activityId;
-      context.go('/record/recording/$activityId');
+      // Ownership transferred — clear so dispose() doesn't tear these down.
+      _selections.clear();
+      ref.read(pendingRecordingProvider.notifier).state = sources;
+      ref.read(activeRecordingIdProvider.notifier).state = started.activityId;
+      context.go('/record/recording/${started.activityId}');
     } catch (e) {
       if (!mounted) return;
-      // _previewSource is still held and connected; the user can press Start
+      // The sources are still held and connected; the user can press Start
       // again without reconnecting.
       setState(() {
         _error = 'Could not start: $e';
@@ -298,25 +364,14 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     }
   }
 
-  Future<int> _createActivity(int athleteId, int? deviceId) async {
-    final db = ref.read(databaseProvider);
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final sport = _sportTypeController.text.trim();
-    final started = await db.startActivity(
-      athleteId: athleteId,
-      startedAtMs: now,
-      sportType: sport.isEmpty ? null : sport,
-      deviceId: deviceId,
-    );
-    return started.activityId;
-  }
-
   @override
   void dispose() {
     _scanTimer?.cancel();
     _scanResultsSub?.cancel();
-    _previewSampleSub?.cancel();
-    _previewSource?.dispose(); // fire-and-forget; dispose() can't await
+    for (final selection in _selections.values) {
+      selection.sampleSub?.cancel();
+      selection.source?.dispose(); // fire-and-forget; dispose() can't await
+    }
     _sportTypeController.dispose();
     _sportTypeFocus.dispose();
     _scanner?.dispose();
@@ -325,6 +380,13 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch so toggling the setting (or selection changes) rebuilds the picker.
+    ref.watch(multiDeviceRecordingEnabledProvider);
+    final startEnabled =
+        _hasSelection &&
+        !_starting &&
+        !_startRequested &&
+        (!_multiEnabled || _anyConnected);
     return Scaffold(
       appBar: AppBar(title: const Text('Start recording')),
       body: ListView(
@@ -337,9 +399,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
           FilledButton.icon(
             icon: const Icon(Icons.play_arrow),
             label: const Text('Start'),
-            onPressed: (_selected == null || _starting || _startRequested)
-                ? null
-                : _onStart,
+            onPressed: startEnabled ? _onStart : null,
           ),
           const SizedBox(height: 16),
           _buildSportTypeField(),
@@ -376,14 +436,26 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     );
   }
 
+  /// Simulated straps offered when the fake-device toggle is on. Multi-device
+  /// mode offers several (with distinct heart rates) so the flow can be tested
+  /// without hardware; single-device mode keeps the lone strap.
+  List<_Entry> _fakeEntries() {
+    if (!_showFakeStrap) return const [];
+    if (!_multiEnabled) {
+      return const [
+        _Entry(id: _fakeId, name: 'Simulated Bluetooth strap', isFake: true),
+      ];
+    }
+    return const [
+      _Entry(id: '__fake_1__', name: 'Simulated strap 1', isFake: true, fakeCenterBpm: 128),
+      _Entry(id: '__fake_2__', name: 'Simulated strap 2', isFake: true, fakeCenterBpm: 148),
+      _Entry(id: '__fake_3__', name: 'Simulated strap 3', isFake: true, fakeCenterBpm: 112),
+    ];
+  }
+
   List<_Entry> _displayedEntries() {
     return [
-      if (_showFakeStrap)
-        const _Entry(
-          id: _fakeId,
-          name: 'Simulated Bluetooth strap',
-          isFake: true,
-        ),
+      ..._fakeEntries(),
       for (final id in _orderedIds)
         if (_devicesById[id] case final d?)
           _Entry(
@@ -441,6 +513,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
 
   List<Widget> _buildDevicePicker(BuildContext context) {
     final entries = _displayedEntries();
+    final multi = _multiEnabled;
 
     return [
       Row(
@@ -460,7 +533,11 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Scan again',
-              onPressed: (_busy || _selected != null) ? null : _startScan,
+              // Multi-device keeps scanning while selected, so refresh stays
+              // available; single-device disables it while a device is picked.
+              onPressed: (_busy || (!multi && _hasSelection))
+                  ? null
+                  : _startScan,
             ),
         ],
       ),
@@ -478,10 +555,11 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
         )
       else
         ...entries.map((entry) {
-          final isSelected = _selected?.id == entry.id;
-          // While a device is selected, scanning is paused, so the other rows
-          // are stale — dim them.
-          final stale = _selected != null && !isSelected;
+          final selection = _selections[entry.id];
+          final isSelected = selection != null;
+          // In single-device mode scanning pauses while selected, so the other
+          // rows are stale — dim them. Multi-device keeps scanning, so no dimming.
+          final stale = !multi && _hasSelection && !isSelected;
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Opacity(
@@ -492,8 +570,9 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
                 isKnown: entry.isKnown,
                 isFake: entry.isFake,
                 isSelected: isSelected,
-                connecting: isSelected && _connectingPreview,
-                bpm: isSelected ? _previewBpm : null,
+                connecting: selection?.connecting ?? false,
+                bpm: selection?.bpm,
+                error: selection?.error,
                 onTap: (_starting || _startRequested)
                     ? null
                     : () => _select(entry),
@@ -514,6 +593,7 @@ class _PickerCard extends StatelessWidget {
     this.isSelected = false,
     this.connecting = false,
     this.bpm,
+    this.error,
     required this.onTap,
   });
 
@@ -524,6 +604,7 @@ class _PickerCard extends StatelessWidget {
   final bool isSelected;
   final bool connecting;
   final int? bpm;
+  final String? error;
   final VoidCallback? onTap;
 
   @override
@@ -540,7 +621,14 @@ class _PickerCard extends StatelessWidget {
     }
 
     Widget subtitle;
-    if (isSelected) {
+    if (isSelected && error != null) {
+      subtitle = Text(
+        error!,
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: scheme.error),
+      );
+    } else if (isSelected) {
       subtitle = Text(
         connecting || bpm == null ? 'Connecting…' : '$bpm BPM',
         style: Theme.of(context).textTheme.bodyMedium,

@@ -5,6 +5,7 @@ import 'hr_source.dart';
 
 class FakeHeartRateSource implements HeartRateSource {
   FakeHeartRateSource({
+    this.deviceName = 'Synthetic strap',
     this.centerBpm = 132,
     this.amplitude = 14,
     this.periodSeconds = 30,
@@ -14,6 +15,8 @@ class FakeHeartRateSource implements HeartRateSource {
     _timer = Timer.periodic(tickInterval, _tick);
   }
 
+  @override
+  final String deviceName;
   final int centerBpm;
   final int amplitude;
   final double periodSeconds;
@@ -24,9 +27,6 @@ class FakeHeartRateSource implements HeartRateSource {
   final _statusController = StreamController<HrSourceStatus>.broadcast();
   late final Timer _timer;
   final DateTime _start = DateTime.now();
-
-  @override
-  String get deviceName => 'Synthetic strap';
 
   @override
   String? get devicePlatformId => null;

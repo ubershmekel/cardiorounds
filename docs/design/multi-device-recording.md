@@ -61,6 +61,10 @@ zones we have): exact for one-athlete-multi-sensor, approximate when the devices
 different people, until per-device `athlete_id` exists. The per-device color swatch +
 name head each block.
 
+The activity-level **shape** (per-third max HR) and **load score** (extra beats) are
+single-athlete analysis. They are still shown on the multi-device review — computed
+from the **primary** device and labelled with its name — rather than hidden.
+
 ## Crash recovery (all devices)
 
 The crash sentinel records **all** devices in the session (`devices: [{platformId,
@@ -78,10 +82,12 @@ When an activity has more than one HR stream, the chart draws **one line per dev
 - Each line uses a stable **per-device palette color** (assigned by set order). This
   color is the device's identity across the live per-device rows, the chart, and the
   legend.
-- **Zone-colored lines** and **tap-to-read inspection** are single-stream features —
-  they are disabled in multi-series mode (per-device color would collide with zone
-  color, and a single tap can't disambiguate overlapping lines). They remain unchanged
-  for single-device activities.
+- **Zone-colored lines** are a single-stream feature — in multi-series mode each line
+  uses its per-device palette color instead (zone color would collide). Zone coloring
+  is unchanged for single-device activities.
+- **Tap-to-read inspection** works in multi-series mode: a tap shows the shared
+  timestamp and one BPM value per device (each tinted in its line color, with a dot on
+  each line), interpolated at that time.
 - The Y axis is scaled to cover all series. A **legend** (color swatch + device name)
   identifies the lines on the review screen; on the live screen the per-device rows
   serve as the legend.

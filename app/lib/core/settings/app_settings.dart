@@ -31,3 +31,29 @@ class FakeHrDeviceNotifier extends Notifier<bool> {
 
 final fakeHrDeviceEnabledProvider =
     NotifierProvider<FakeHrDeviceNotifier, bool>(FakeHrDeviceNotifier.new);
+
+const _multiDeviceRecordingKey = 'multiDeviceRecordingEnabled';
+
+/// Whether the record picker allows selecting more than one HR strap for a
+/// single session. Off by default; opt in from Advanced settings.
+class MultiDeviceRecordingNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    return ref
+            .read(sharedPreferencesProvider)
+            .getBool(_multiDeviceRecordingKey) ??
+        false;
+  }
+
+  Future<void> set(bool enabled) async {
+    state = enabled;
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool(_multiDeviceRecordingKey, enabled);
+  }
+}
+
+final multiDeviceRecordingEnabledProvider =
+    NotifierProvider<MultiDeviceRecordingNotifier, bool>(
+      MultiDeviceRecordingNotifier.new,
+    );

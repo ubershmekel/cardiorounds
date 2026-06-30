@@ -84,7 +84,8 @@ class _RecoveryPromptState extends ConsumerState<RecoveryPrompt> {
   String _describe(InterruptedRecording recording, int interruptedAtMs) {
     final interruptedAt = DateTime.fromMillisecondsSinceEpoch(interruptedAtMs);
     final ago = DateTime.now().difference(interruptedAt);
-    return 'A recording on ${recording.deviceName} was interrupted '
+    final names = recording.devices.map((d) => d.name).join(', ');
+    return 'A recording on $names was interrupted '
         '${_formatAgo(ago)}. Resume it, or save what was already recorded as a '
         'finished workout?';
   }
@@ -100,8 +101,9 @@ class _RecoveryPromptState extends ConsumerState<RecoveryPrompt> {
     return '$days ${days == 1 ? 'day' : 'days'} ago';
   }
 
-  /// Reconnects to the strap and hands the live source to a resumed recording.
-  /// On failure the sentinel is left in place so the user can retry next launch.
+  /// Reconnects to every device best-effort and hands the live sources to a
+  /// resumed recording. Resumes with whichever devices reconnect; only fails if
+  /// none do. On total failure the sentinel is left in place for a later retry.
   Future<void> _resume(InterruptedRecording recording) async {
     showDialog<void>(
       context: context,
@@ -109,31 +111,57 @@ class _RecoveryPromptState extends ConsumerState<RecoveryPrompt> {
       builder: (_) => const _ConnectingDialog(),
     );
 
-    HeartRateSource? source;
-    try {
-      source = await ref.read(hrConnectorProvider)(
-        recording.devicePlatformId,
-        recording.deviceName,
-      );
-    } catch (e) {
-      appLog('Recovery', 'Resume reconnect failed: $e');
+    final db = ref.read(databaseProvider);
+    final connect = ref.read(hrConnectorProvider);
+    // Match each device back to its HR set: platform id -> device id -> set id.
+    final sets = await db.hrSetsForActivity(recording.activityId);
+    final knownDevices = await db.allDevices();
+    final deviceIdByPlatform = {
+      for (final d in knownDevices) d.platformId: d.id,
+    };
+    final setIdByDeviceId = {
+      for (final s in sets)
+        if (s.deviceId != null) s.deviceId!: s.id,
+    };
+
+    final sources = <RecordingSource>[];
+    for (final device in recording.devices) {
+      HeartRateSource? source;
+      try {
+        source = await connect(device.platformId, device.name);
+      } catch (e) {
+        appLog('Recovery', 'Resume reconnect failed for ${device.name}: $e');
+        continue;
+      }
+      final deviceId = deviceIdByPlatform[device.platformId];
+      final setId = deviceId == null ? null : setIdByDeviceId[deviceId];
+      if (setId == null) {
+        // Can't map this device back to its set — don't record an orphan stream.
+        appLog('Recovery', 'No set for reconnected ${device.name}; skipping');
+        await source.dispose();
+        continue;
+      }
+      sources.add(RecordingSource(source: source, setId: setId));
     }
 
     if (!mounted) {
-      await source?.dispose();
+      for (final s in sources) {
+        await s.source.dispose();
+      }
       return;
     }
     Navigator.of(context, rootNavigator: true).pop(); // dismiss connecting
 
-    if (source == null) {
+    if (sources.isEmpty) {
       _handled = false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Couldn\'t reconnect to ${recording.deviceName}')),
-      );
+      final names = recording.devices.map((d) => d.name).join(', ');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Couldn\'t reconnect to $names')));
       return;
     }
 
-    ref.read(pendingHrSourceProvider.notifier).state = source;
+    ref.read(pendingRecordingProvider.notifier).state = sources;
     ref.read(resumeStartedAtProvider.notifier).state =
         DateTime.fromMillisecondsSinceEpoch(recording.startedAtMs);
     ref.read(activeRecordingIdProvider.notifier).state = recording.activityId;

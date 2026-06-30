@@ -3,9 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../hr/hr_source.dart';
 import 'database.dart';
 
-/// Source chosen by the user on the Confirm Record screen, consumed by the
-/// RecordingController on the next route. Reset to null when recording stops.
-final pendingHrSourceProvider = StateProvider<HeartRateSource?>((_) => null);
+/// A live HR source paired with the [HrSampleRow] set it records into. The
+/// Confirm Record screen and the recovery flow build a list of these and hand
+/// it to the recording screen, which owns the connections from then on.
+class RecordingSource {
+  const RecordingSource({required this.source, required this.setId});
+
+  final HeartRateSource source;
+  final int setId;
+}
+
+/// Sources chosen on the Confirm Record screen (one per device), consumed by the
+/// RecordingController on the next route. Reset to null when recording starts.
+final pendingRecordingProvider = StateProvider<List<RecordingSource>?>(
+  (_) => null,
+);
 
 /// The activityId of the in-progress recording, or null when not recording.
 final activeRecordingIdProvider = StateProvider<int?>((_) => null);
@@ -60,6 +72,16 @@ final samplesProvider = StreamProvider.family<List<HrSampleRow>, int>((
 ) {
   final db = ref.watch(databaseProvider);
   return db.watchSamples(activityId);
+});
+
+/// All HR streams for an activity (one per device). Used by the multi-device
+/// recording and review screens to draw a line and stats block per device.
+final hrSeriesProvider = StreamProvider.family<List<HrSeries>, int>((
+  ref,
+  activityId,
+) {
+  final db = ref.watch(databaseProvider);
+  return db.watchHrSeries(activityId);
 });
 
 final workoutMarkerProvider = StreamProvider.family<Marker?, int>((

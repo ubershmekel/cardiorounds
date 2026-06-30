@@ -11,12 +11,33 @@ part 'database.g.dart';
 
 const String kDatabaseFileName = 'cardio_rounds';
 
-/// Result of starting a recording: the new activity plus its primary HR
-/// [SampleSet]. Both ids are returned so callers don't re-query the set.
+/// Result of starting a recording: the new activity plus one HR [SampleSet] per
+/// device, in the same order as the device ids passed to [startActivity] /
+/// [AppDatabase.startActivityWithDevices]. Ids are returned so callers don't
+/// re-query the sets.
 class StartedActivity {
-  const StartedActivity({required this.activityId, required this.hrSetId});
+  const StartedActivity({required this.activityId, required this.hrSetIds});
   final int activityId;
-  final int hrSetId;
+  final List<int> hrSetIds;
+
+  /// The primary (first) HR set — the single-device case.
+  int get hrSetId => hrSetIds.first;
+}
+
+/// One HR stream within an activity: a [SampleSet] (with its device name, if the
+/// device is still known) and its ordered samples. See [AppDatabase.watchHrSeries].
+class HrSeries {
+  HrSeries({
+    required this.setId,
+    required this.deviceId,
+    required this.deviceName,
+    required this.samples,
+  });
+
+  final int setId;
+  final int? deviceId;
+  final String? deviceName;
+  final List<HrSampleRow> samples;
 }
 
 @DriftDatabase(tables: [Athletes, Devices, Activities, SampleSets, HrSamples, Markers])
@@ -212,6 +233,24 @@ class AppDatabase extends _$AppDatabase {
     String? sportType,
     int? deviceId,
   }) {
+    return startActivityWithDevices(
+      athleteId: athleteId,
+      startedAtMs: startedAtMs,
+      sportType: sportType,
+      deviceIds: [deviceId],
+    );
+  }
+
+  /// Creates an activity and one HR set per device, in one transaction. The
+  /// returned [StartedActivity.hrSetIds] line up with [deviceIds] (use null for
+  /// the fake/debug source). The first device is the primary set.
+  Future<StartedActivity> startActivityWithDevices({
+    required int athleteId,
+    required int startedAtMs,
+    String? sportType,
+    required List<int?> deviceIds,
+  }) {
+    assert(deviceIds.isNotEmpty, 'a recording needs at least one HR set');
     return transaction(() async {
       final activityId = await into(activities).insert(
         ActivitiesCompanion.insert(
@@ -223,14 +262,63 @@ class AppDatabase extends _$AppDatabase {
           updatedAtMs: startedAtMs,
         ),
       );
-      final hrSetId = await into(sampleSets).insert(
-        SampleSetsCompanion.insert(
-          activityId: activityId,
-          kind: 'hr',
-          deviceId: Value(deviceId),
-        ),
-      );
-      return StartedActivity(activityId: activityId, hrSetId: hrSetId);
+      final hrSetIds = <int>[];
+      for (final deviceId in deviceIds) {
+        hrSetIds.add(
+          await into(sampleSets).insert(
+            SampleSetsCompanion.insert(
+              activityId: activityId,
+              kind: 'hr',
+              deviceId: Value(deviceId),
+            ),
+          ),
+        );
+      }
+      return StartedActivity(activityId: activityId, hrSetIds: hrSetIds);
+    });
+  }
+
+  /// Every HR set for an activity, oldest first. Used by recovery to match a
+  /// reconnected device (by id) back to its set.
+  Future<List<SampleSet>> hrSetsForActivity(int activityId) {
+    return (select(sampleSets)
+          ..where((s) => s.activityId.equals(activityId) & s.kind.equals('hr'))
+          ..orderBy([(s) => OrderingTerm.asc(s.id)]))
+        .get();
+  }
+
+  /// All HR streams for an activity, one [HrSeries] per set (ordered by set id,
+  /// samples by time), each carrying the device name when the device is still
+  /// known. Sets with no samples yet are omitted. Used by the multi-series chart.
+  Stream<List<HrSeries>> watchHrSeries(int activityId) {
+    final query = select(hrSamples).join([
+      innerJoin(sampleSets, sampleSets.id.equalsExp(hrSamples.setId)),
+      leftOuterJoin(devices, devices.id.equalsExp(sampleSets.deviceId)),
+    ])
+      ..where(
+        sampleSets.activityId.equals(activityId) & sampleSets.kind.equals('hr'),
+      )
+      ..orderBy([
+        OrderingTerm.asc(sampleSets.id),
+        OrderingTerm.asc(hrSamples.tMs),
+      ]);
+    return query.watch().map((rows) {
+      final bySet = <int, HrSeries>{};
+      final order = <int>[];
+      for (final row in rows) {
+        final set = row.readTable(sampleSets);
+        final series = bySet.putIfAbsent(set.id, () {
+          order.add(set.id);
+          return HrSeries(
+            setId: set.id,
+            deviceId: set.deviceId,
+            deviceName: row.readTableOrNull(devices)?.name,
+            samples: [],
+          );
+        });
+        series.samples.add(row.readTable(hrSamples));
+      }
+      return [for (final id in order) bySet[id]!];
     });
   }
 

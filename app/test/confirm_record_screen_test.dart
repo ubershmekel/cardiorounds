@@ -76,11 +76,11 @@ class FailStartActivityDb extends AppDatabase {
   FailStartActivityDb() : super.forTesting(NativeDatabase.memory());
 
   @override
-  Future<StartedActivity> startActivity({
+  Future<StartedActivity> startActivityWithDevices({
     required int athleteId,
     required int startedAtMs,
     String? sportType,
-    int? deviceId,
+    required List<int?> deviceIds,
   }) async {
     throw Exception('boom');
   }
@@ -99,8 +99,12 @@ void main() {
   Future<void> setUpContainer({
     AppDatabase? database,
     bool fakeStrap = false,
+    bool multiDevice = false,
   }) async {
-    SharedPreferences.setMockInitialValues({'fakeHrDeviceEnabled': fakeStrap});
+    SharedPreferences.setMockInitialValues({
+      'fakeHrDeviceEnabled': fakeStrap,
+      'multiDeviceRecordingEnabled': multiDevice,
+    });
     final prefs = await SharedPreferences.getInstance();
     db = database ?? AppDatabase.forTesting(NativeDatabase.memory());
     scanner = FakeHrScanner();
@@ -116,8 +120,12 @@ void main() {
 
   tearDown(() async {
     // The screen transfers source ownership on Start; dispose any handed-off
-    // source so its stream/timers don't outlive the test.
-    await container.read(pendingHrSourceProvider)?.dispose();
+    // sources so their streams/timers don't outlive the test.
+    for (final s
+        in container.read(pendingRecordingProvider) ??
+            const <RecordingSource>[]) {
+      await s.source.dispose();
+    }
     container.dispose();
     // The DB is created here and injected via overrideWithValue, so the
     // provider's onDispose never runs — close it explicitly to avoid drift's
@@ -205,10 +213,42 @@ void main() {
     await tap(tester, find.widgetWithText(FilledButton, 'Start'));
 
     expect(find.textContaining('recording-'), findsOneWidget);
-    expect(container.read(pendingHrSourceProvider), same(connected));
+    expect(container.read(pendingRecordingProvider)!.single.source, same(connected));
     expect(container.read(activeRecordingIdProvider), isNotNull);
     expect(connected.disposed, isFalse); // ownership transferred, not disposed
     expect(await db.allDevices(), hasLength(1)); // device remembered
+  });
+
+  testWidgets('multi-device: selecting two straps starts both into two sets', (
+    tester,
+  ) async {
+    await setUpContainer(multiDevice: true);
+    final sources = <String, FakeSource>{};
+    connect = (id, name) async => sources[id] = FakeSource(name, id);
+
+    await tester.pumpWidget(buildApp());
+    await settle(tester);
+    scanner.emit([_device('Strap A'), _device('Strap B')]);
+    await settle(tester);
+
+    // Toggling both rows keeps both selected (no replace) and scanning runs.
+    await tap(tester, find.text('Strap A'));
+    await tap(tester, find.text('Strap B'));
+    await settle(tester);
+    sources['Strap A']!.emitBpm(70);
+    sources['Strap B']!.emitBpm(80);
+    await settle(tester);
+    expect(find.text('70 BPM'), findsOneWidget);
+    expect(find.text('80 BPM'), findsOneWidget);
+
+    await tap(tester, find.widgetWithText(FilledButton, 'Start'));
+    await settle(tester);
+
+    expect(find.textContaining('recording-'), findsOneWidget);
+    expect(container.read(pendingRecordingProvider), hasLength(2));
+    final activityId = container.read(activeRecordingIdProvider)!;
+    expect(await db.hrSetsForActivity(activityId), hasLength(2));
+    expect(await db.allDevices(), hasLength(2)); // both remembered
   });
 
   testWidgets('Start tapped before the connection is ready fires once ready', (
@@ -258,7 +298,7 @@ void main() {
 
     expect(find.textContaining('Could not start'), findsOneWidget);
     expect(connected.disposed, isFalse); // connection preserved
-    expect(container.read(pendingHrSourceProvider), isNull);
+    expect(container.read(pendingRecordingProvider), isNull);
     // Still selected and not busy, so Start is enabled again.
     expect(
       tester

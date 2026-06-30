@@ -7,48 +7,71 @@ import 'package:path_provider/path_provider.dart';
 
 import '../app_logger.dart';
 
+/// One device that was recording when the app died — the platform id needed to
+/// reconnect and a name for the recovery prompt.
+class RecordedDevice {
+  const RecordedDevice({required this.platformId, required this.name});
+
+  final String platformId;
+  final String name;
+
+  Map<String, Object?> toJson() => {'platformId': platformId, 'name': name};
+
+  static RecordedDevice? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final platformId = json['platformId'];
+    final name = json['name'];
+    if (platformId is! String || name is! String) return null;
+    return RecordedDevice(platformId: platformId, name: name);
+  }
+}
+
 /// A recording that was live when the app last died. Captured to a flat file
 /// (see [RecordingSentinel]) so a crashed session can be detected and resumed
-/// on the next launch. Carries the device id needed to reconnect and the
+/// on the next launch. Carries every device needed to reconnect and the
 /// original start time so the resumed timeline continues seamlessly.
 class InterruptedRecording {
   const InterruptedRecording({
     required this.activityId,
     required this.startedAtMs,
-    required this.devicePlatformId,
-    required this.deviceName,
+    required this.devices,
   });
 
   final int activityId;
   final int startedAtMs;
-  final String devicePlatformId;
-  final String deviceName;
+  final List<RecordedDevice> devices;
 
   Map<String, Object?> toJson() => {
     'activityId': activityId,
     'startedAtMs': startedAtMs,
-    'devicePlatformId': devicePlatformId,
-    'deviceName': deviceName,
+    'devices': [for (final d in devices) d.toJson()],
   };
 
   /// Returns null for malformed JSON rather than throwing — a corrupt sentinel
-  /// should be ignored (and cleared), never crash startup.
+  /// should be ignored (and cleared), never crash startup. Reads the legacy
+  /// single-device shape (`devicePlatformId`/`deviceName`) as a one-device list.
   static InterruptedRecording? fromJson(Map<String, Object?> json) {
     final activityId = json['activityId'];
     final startedAtMs = json['startedAtMs'];
-    final devicePlatformId = json['devicePlatformId'];
-    final deviceName = json['deviceName'];
-    if (activityId is! int ||
-        startedAtMs is! int ||
-        devicePlatformId is! String ||
-        deviceName is! String) {
-      return null;
+    if (activityId is! int || startedAtMs is! int) return null;
+
+    final List<RecordedDevice> devices;
+    final rawDevices = json['devices'];
+    if (rawDevices is List) {
+      final parsed = [for (final d in rawDevices) RecordedDevice.fromJson(d)];
+      if (parsed.isEmpty || parsed.any((d) => d == null)) return null;
+      devices = [for (final d in parsed) d!];
+    } else {
+      // Back-compat: an old single-device sentinel.
+      final platformId = json['devicePlatformId'];
+      final name = json['deviceName'];
+      if (platformId is! String || name is! String) return null;
+      devices = [RecordedDevice(platformId: platformId, name: name)];
     }
     return InterruptedRecording(
       activityId: activityId,
       startedAtMs: startedAtMs,
-      devicePlatformId: devicePlatformId,
-      deviceName: deviceName,
+      devices: devices,
     );
   }
 }

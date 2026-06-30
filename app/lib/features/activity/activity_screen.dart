@@ -31,6 +31,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   Widget build(BuildContext context) {
     final activity = ref.watch(activityProvider(widget.activityId));
     final samples = ref.watch(samplesProvider(widget.activityId));
+    final series = ref.watch(hrSeriesProvider(widget.activityId)).valueOrNull ?? const [];
     final marker = ref.watch(workoutMarkerProvider(widget.activityId));
     final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
     final zoneSetup = zoneSetupFor(
@@ -64,6 +65,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
           data: (rows) => _ActivityBody(
             activity: a,
             rows: rows,
+            series: series,
             workoutMarker: marker.valueOrNull,
             editing: _editing,
             zoneSetup: zoneSetup,
@@ -114,6 +116,7 @@ class _ActivityBody extends StatelessWidget {
   const _ActivityBody({
     required this.activity,
     required this.rows,
+    required this.series,
     required this.workoutMarker,
     required this.editing,
     required this.zoneSetup,
@@ -125,6 +128,11 @@ class _ActivityBody extends StatelessWidget {
 
   final Activity activity;
   final List<HrSampleRow> rows;
+
+  /// All HR streams for the activity. More than one means a multi-device session:
+  /// the chart draws a line per device and stats are shown per device. With one
+  /// stream the screen is identical to the single-device review.
+  final List<HrSeries> series;
   final Marker? workoutMarker;
   final bool editing;
   final ZoneSetup? zoneSetup;
@@ -199,6 +207,47 @@ class _ActivityBody extends StatelessWidget {
     return beats.toString();
   }
 
+  /// Per-third max HR plus the load score — the workout's shape and intensity.
+  /// Computed from the primary set; shared by the single- and multi-device views.
+  Widget _shapeStats(BuildContext context, List<int?> thirds, int? extraBeats) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _TrendStat(
+              label: '1st third',
+              value: thirds[0],
+              tooltip: 'Max HR in the first third of the workout',
+            ),
+            _TrendStat(
+              label: '2nd third',
+              value: thirds[1],
+              tooltip: 'Max HR in the second third of the workout',
+            ),
+            _TrendStat(
+              label: '3rd third',
+              value: thirds[2],
+              tooltip: 'Max HR in the final third of the workout',
+            ),
+          ],
+        ),
+        if (extraBeats != null) ...[
+          const SizedBox(height: 16),
+          Center(
+            child: _TrendStat(
+              label: 'extra beats',
+              valueText: _formatBeats(extraBeats),
+              tooltip:
+                  'Total beats above resting HR during the workout ((bpm - rest_bpm) × minutes)',
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -234,6 +283,31 @@ class _ActivityBody extends StatelessWidget {
             windowStartMs: workoutStart,
             windowEndMs: workoutEnd,
           );
+
+    // Multi-device: one line per device, colored by set order, plus per-device
+    // stats below. Single-device review is unchanged.
+    final multi = series.length > 1;
+    final chartSeries = [
+      for (var i = 0; i < series.length; i++)
+        HrChartSeries(
+          points: [
+            for (final r in series[i].samples)
+              HrChartPoint(tMs: r.tMs, hr: r.hr),
+          ],
+          color: hrSeriesColor(i),
+          label: series[i].deviceName ?? 'Device ${i + 1}',
+        ),
+    ];
+    final chartAxis = multi
+        ? HrAxisRange.forStats(
+            minHr: HrStats.fromHeartRates(
+              chartSeries.expand((s) => s.points).map((p) => p.hr),
+            ).min,
+            maxHr: HrStats.fromHeartRates(
+              chartSeries.expand((s) => s.points).map((p) => p.hr),
+            ).max,
+          )
+        : axis;
 
     final meta = [
       _formatDate(activity.startedAtMs),
@@ -275,18 +349,25 @@ class _ActivityBody extends StatelessWidget {
                         onChanged: onWorkoutChanged,
                       )
                     : ZoomableHrChart(
-                        points: points,
-                        axis: axis,
+                        points: multi ? const [] : points,
+                        series: multi ? chartSeries : null,
+                        axis: chartAxis,
                         fullStartMs: 0,
                         fullEndMs: activity.durationMs,
                         initialStartMs: workoutStart,
                         initialEndMs: workoutEnd,
                         workoutStartMs: workoutStart,
                         workoutEndMs: workoutEnd,
-                        zoneSetup: zoneSetup,
+                        zoneSetup: multi ? null : zoneSetup,
                         activityStartMs: activity.startedAtMs,
                       ),
               ),
+              // Editing trims the workout window on the single primary line; the
+              // multi-line comparison view returns when editing ends.
+              if (multi && !editing) ...[
+                const SizedBox(height: 8),
+                HrChartLegend(series: chartSeries),
+              ],
               if (editing)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -299,45 +380,41 @@ class _ActivityBody extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 16),
-              if (zoneSetup == null)
-                ZoneLockedPrompt(onTap: onOpenSettings)
-              else
-                ZoneBreakdown(setup: zoneSetup!, times: zoneTimes!),
-              const SizedBox(height: 24),
-              Text('Heart rate stats', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              HrStatsRow(stats: stats),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _TrendStat(
-                    label: '1st third',
-                    value: thirds[0],
-                    tooltip: 'Max HR in the first third of the workout',
-                  ),
-                  _TrendStat(
-                    label: '2nd third',
-                    value: thirds[1],
-                    tooltip: 'Max HR in the second third of the workout',
-                  ),
-                  _TrendStat(
-                    label: '3rd third',
-                    value: thirds[2],
-                    tooltip: 'Max HR in the final third of the workout',
-                  ),
+              if (multi) ...[
+                if (zoneSetup == null) ...[
+                  ZoneLockedPrompt(onTap: onOpenSettings),
+                  const SizedBox(height: 16),
                 ],
-              ),
-              if (extraBeats != null) ...[
-                const SizedBox(height: 16),
-                Center(
-                  child: _TrendStat(
-                    label: 'extra beats',
-                    valueText: _formatBeats(extraBeats),
-                    tooltip:
-                        'Total beats above resting HR during the workout ((bpm - rest_bpm) × minutes)',
+                for (var i = 0; i < series.length; i++) ...[
+                  _SeriesStatsBlock(
+                    color: hrSeriesColor(i),
+                    name: series[i].deviceName ?? 'Device ${i + 1}',
+                    samples: series[i].samples,
+                    zoneSetup: zoneSetup,
+                    windowStartMs: workoutStart,
+                    windowEndMs: workoutEnd,
                   ),
+                  const SizedBox(height: 16),
+                ],
+                // Shape and load are single-athlete analysis, so they reflect
+                // the primary (first) device.
+                Text(
+                  'Workout shape · ${series.first.deviceName ?? 'Device 1'}',
+                  style: theme.textTheme.titleMedium,
                 ),
+                const SizedBox(height: 8),
+                _shapeStats(context, thirds, extraBeats),
+              ] else ...[
+                if (zoneSetup == null)
+                  ZoneLockedPrompt(onTap: onOpenSettings)
+                else
+                  ZoneBreakdown(setup: zoneSetup!, times: zoneTimes!),
+                const SizedBox(height: 24),
+                Text('Heart rate stats', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                HrStatsRow(stats: stats),
+                const SizedBox(height: 16),
+                _shapeStats(context, thirds, extraBeats),
               ],
               const SizedBox(height: 32),
               TextButton.icon(
@@ -353,6 +430,80 @@ class _ActivityBody extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One device's review stats in a multi-device activity: a name header with the
+/// device's chart-line color, its min/avg/max over the workout window, and its
+/// time-in-zone breakdown (scored against the single athlete's zones).
+class _SeriesStatsBlock extends StatelessWidget {
+  const _SeriesStatsBlock({
+    required this.color,
+    required this.name,
+    required this.samples,
+    required this.zoneSetup,
+    required this.windowStartMs,
+    required this.windowEndMs,
+  });
+
+  final Color color;
+  final String name;
+  final List<HrSampleRow> samples;
+  final ZoneSetup? zoneSetup;
+  final int? windowStartMs;
+  final int? windowEndMs;
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = HrStats.fromTimedHeartRates(
+      samples.map((r) => (tMs: r.tMs, hr: r.hr)),
+      windowStartMs: windowStartMs,
+      windowEndMs: windowEndMs,
+    );
+    final zoneTimes = zoneSetup == null
+        ? null
+        : computeZoneTimes(
+            samples,
+            zoneSetup!,
+            windowStartMs: windowStartMs,
+            windowEndMs: windowEndMs,
+          );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    name,
+                    style: Theme.of(context).textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            HrStatsRow(stats: stats),
+            if (zoneSetup != null) ...[
+              const SizedBox(height: 16),
+              ZoneBreakdown(setup: zoneSetup!, times: zoneTimes!),
+            ],
+          ],
         ),
       ),
     );

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/zones/zones.dart';
@@ -10,6 +11,70 @@ class HrChartPoint {
   final int? hr;
 
   bool get isValidHr => hr != null && hr! > 0;
+}
+
+/// One line on a multi-device chart: a device's points drawn in its identity
+/// [color], labelled by device name in the legend.
+class HrChartSeries {
+  const HrChartSeries({
+    required this.points,
+    required this.color,
+    required this.label,
+  });
+
+  final List<HrChartPoint> points;
+  final Color color;
+  final String label;
+}
+
+/// Distinct line colors for multi-device charts, assigned by series order. Kept
+/// away from the zone palette (zones.dart) since these denote device identity,
+/// not effort. Cycles if there are more devices than colors.
+const List<Color> kHrSeriesPalette = [
+  Color(0xFF42A5F5), // blue
+  Color(0xFFFFA726), // orange
+  Color(0xFF66BB6A), // green
+  Color(0xFFAB47BC), // purple
+  Color(0xFF26C6DA), // cyan
+  Color(0xFFEC407A), // pink
+];
+
+Color hrSeriesColor(int index) =>
+    kHrSeriesPalette[index % kHrSeriesPalette.length];
+
+/// A legend tying each device's name to its chart line color. Used on the
+/// activity review screen; the live recording screen's per-device rows serve the
+/// same purpose.
+class HrChartLegend extends StatelessWidget {
+  const HrChartLegend({super.key, required this.series});
+
+  final List<HrChartSeries> series;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      children: [
+        for (final s in series)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: s.color,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(s.label, style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+      ],
+    );
+  }
 }
 
 // Gaps longer than this between consecutive samples break the chart line,
@@ -83,8 +148,9 @@ class HrChartGeometry {
 class HrChart extends StatelessWidget {
   const HrChart({
     super.key,
-    required this.points,
+    this.points = const [],
     required this.axis,
+    this.series,
     this.windowStartMs,
     this.windowEndMs,
     this.lineColor,
@@ -98,6 +164,11 @@ class HrChart extends StatelessWidget {
 
   final List<HrChartPoint> points;
   final HrAxisRange axis;
+
+  /// When non-null and non-empty, the chart draws one line per series in its own
+  /// color (zone coloring and tap inspection are disabled). When null, the
+  /// single-line [points] behavior applies.
+  final List<HrChartSeries>? series;
   final int? windowStartMs;
   final int? windowEndMs;
   final Color? lineColor;
@@ -116,7 +187,10 @@ class HrChart extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
-    if (points.isEmpty) {
+    final series = this.series;
+    final hasSeries = series != null && series.isNotEmpty;
+
+    if (!hasSeries && points.isEmpty) {
       return Center(
         child: Text(
           'No heart-rate data',
@@ -127,11 +201,20 @@ class HrChart extends StatelessWidget {
       );
     }
 
-    final start = windowStartMs ?? points.first.tMs;
-    final end = windowEndMs ?? points.last.tMs;
+    // Default window spans all data; for multi-series, across every line.
+    final allPoints = hasSeries
+        ? [for (final s in series) ...s.points]
+        : points;
+    final start =
+        windowStartMs ??
+        allPoints.map((p) => p.tMs).reduce((a, b) => a < b ? a : b);
+    final end =
+        windowEndMs ??
+        allPoints.map((p) => p.tMs).reduce((a, b) => a > b ? a : b);
 
     return _SelectableHrChart(
       points: points,
+      series: series,
       axis: axis,
       startMs: start,
       endMs: end == start ? start + 1 : end,
@@ -155,16 +238,27 @@ class HrChart extends StatelessWidget {
   }
 }
 
+/// One device's reading at the selected timestamp, drawn as a dot in its line
+/// color and listed in the tap label.
+class HrSelectionValue {
+  const HrSelectionValue({required this.hr, required this.color});
+
+  final int hr;
+  final Color color;
+}
+
 class HrChartSelection {
-  const HrChartSelection({required this.tMs, required this.hr});
+  const HrChartSelection({required this.tMs, required this.values});
 
   final int tMs;
-  final int hr;
+  // One per line that has data at [tMs]; length 1 for a single-device chart.
+  final List<HrSelectionValue> values;
 }
 
 class _SelectableHrChart extends StatefulWidget {
   const _SelectableHrChart({
     required this.points,
+    this.series,
     required this.axis,
     required this.startMs,
     required this.endMs,
@@ -183,6 +277,7 @@ class _SelectableHrChart extends StatefulWidget {
   });
 
   final List<HrChartPoint> points;
+  final List<HrChartSeries>? series;
   final HrAxisRange axis;
   final int startMs;
   final int endMs;
@@ -205,7 +300,6 @@ class _SelectableHrChart extends StatefulWidget {
 
 class _SelectableHrChartState extends State<_SelectableHrChart> {
   static const double _selectionLabelWidth = 82;
-  static const double _selectionLabelHeight = 40;
 
   HrChartSelection? _selection;
 
@@ -214,10 +308,10 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
     super.didUpdateWidget(oldWidget);
     final selection = _selection;
     if (selection == null) return;
-    final hr = _hrAtT(selection.tMs);
-    _selection = hr == null
+    final values = _valuesAtT(selection.tMs);
+    _selection = values.isEmpty
         ? null
-        : HrChartSelection(tMs: selection.tMs, hr: hr);
+        : HrChartSelection(tMs: selection.tMs, values: values);
   }
 
   void _selectAt(Offset position, Size size) {
@@ -237,16 +331,33 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
     if (!plotRect.contains(position)) return;
 
     final tMs = g.tForX(position.dx);
-    final hr = _hrAtT(tMs);
-    if (hr == null) return;
-    setState(() => _selection = HrChartSelection(tMs: tMs, hr: hr));
+    final values = _valuesAtT(tMs);
+    if (values.isEmpty) return;
+    setState(() => _selection = HrChartSelection(tMs: tMs, values: values));
   }
 
-  int? _hrAtT(int tMs) {
+  /// The reading of each line at [tMs] (one per device with data there). For a
+  /// single-device chart this is at most one value in [widget.lineColor].
+  List<HrSelectionValue> _valuesAtT(int tMs) {
+    final series = widget.series;
+    if (series != null) {
+      return [
+        for (final s in series)
+          if (_hrAtTForPoints(s.points, tMs) case final hr?)
+            HrSelectionValue(hr: hr, color: s.color),
+      ];
+    }
+    final hr = _hrAtTForPoints(widget.points, tMs);
+    return hr == null
+        ? const []
+        : [HrSelectionValue(hr: hr, color: widget.lineColor)];
+  }
+
+  int? _hrAtTForPoints(List<HrChartPoint> points, int tMs) {
     if (tMs < widget.startMs || tMs > widget.endMs) return null;
 
     HrChartPoint? previous;
-    for (final point in widget.points) {
+    for (final point in points) {
       if (point.tMs < widget.startMs || point.tMs > widget.endMs) {
         previous = null;
         continue;
@@ -300,6 +411,7 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
                   size: Size.infinite,
                   painter: HrChartPainter(
                     points: widget.points,
+                    series: widget.series,
                     axis: widget.axis,
                     startMs: widget.startMs,
                     endMs: widget.endMs,
@@ -363,12 +475,18 @@ class _SelectionLabel extends StatelessWidget {
     final left = (geometry.xForT(selection.tMs) - width / 2)
         .clamp(geometry.plotLeft, geometry.plotRight - width)
         .toDouble();
+    // One row per device BPM plus the timestamp row; grow with device count.
+    final height = 22.0 + selection.values.length * 16.0;
+    // Only tint per-device BPM when there's more than one to distinguish.
+    final multi = selection.values.length > 1;
+    // Highest BPM on top, mirroring the lines' vertical order on the chart.
+    final values = [...selection.values]..sort((a, b) => b.hr.compareTo(a.hr));
 
     return Positioned(
       left: left,
       top: 0,
       width: width,
-      height: _SelectableHrChartState._selectionLabelHeight,
+      height: height,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onDismissed,
@@ -389,12 +507,18 @@ class _SelectionLabel extends StatelessWidget {
                 overflow: TextOverflow.clip,
                 style: textStyle,
               ),
-              Text(
-                '${selection.hr} bpm',
-                maxLines: 1,
-                overflow: TextOverflow.clip,
-                style: textStyle,
-              ),
+              for (final v in values)
+                Text(
+                  '${v.hr} bpm',
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                  style: multi
+                      ? textStyle.copyWith(
+                          color: v.color,
+                          fontWeight: FontWeight.w600,
+                        )
+                      : textStyle,
+                ),
             ],
           ),
         ),
@@ -406,6 +530,7 @@ class _SelectionLabel extends StatelessWidget {
 class HrChartPainter extends CustomPainter {
   HrChartPainter({
     required this.points,
+    this.series,
     required this.axis,
     required this.startMs,
     required this.endMs,
@@ -423,6 +548,7 @@ class HrChartPainter extends CustomPainter {
   });
 
   final List<HrChartPoint> points;
+  final List<HrChartSeries>? series;
   final HrAxisRange axis;
   final int startMs;
   final int endMs;
@@ -503,50 +629,76 @@ class HrChartPainter extends CustomPainter {
       ..strokeWidth = 1;
     canvas.drawLine(Offset(x, g.plotTop), Offset(x, g.plotBottom), linePaint);
 
-    final pointPaint = Paint()..color = lineColor;
-    canvas.drawCircle(Offset(x, g.yForHr(s.hr)), 3, pointPaint);
+    for (final v in s.values) {
+      canvas.drawCircle(
+        Offset(x, g.yForHr(v.hr)),
+        3,
+        Paint()..color = v.color,
+      );
+    }
+  }
+
+  /// Draws one solid-color line through [pts] within the visible window,
+  /// breaking the path at NULL samples and long gaps. Used for the single-color
+  /// line and for each device line in multi-series mode.
+  void _paintSolidLine(
+    Canvas canvas,
+    HrChartGeometry g,
+    List<HrChartPoint> pts,
+    Color color,
+  ) {
+    final paint = Paint()
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    final path = Path();
+    var penDown = false;
+    int? prevTMs;
+    for (final p in pts) {
+      if (p.tMs < startMs || p.tMs > endMs || !p.isValidHr) {
+        penDown = false;
+        prevTMs = null;
+        continue;
+      }
+      if (prevTMs != null && p.tMs - prevTMs > _maxSampleGapMs) {
+        penDown = false;
+      }
+      final offset = Offset(g.xForT(p.tMs), g.yForHr(p.hr!));
+      if (penDown) {
+        path.lineTo(offset.dx, offset.dy);
+      } else {
+        path.moveTo(offset.dx, offset.dy);
+        penDown = true;
+      }
+      prevTMs = p.tMs;
+    }
+    canvas.drawPath(path, paint);
   }
 
   void _paintLine(Canvas canvas, HrChartGeometry g) {
+    // Multi-series: one solid line per device, each in its own color.
+    final series = this.series;
+    if (series != null) {
+      for (final s in series) {
+        _paintSolidLine(canvas, g, s.points, s.color);
+      }
+      return;
+    }
+
+    final setup = zoneSetup;
+    if (setup == null) {
+      // Single-color line: one path, faster to draw.
+      _paintSolidLine(canvas, g, points, lineColor);
+      return;
+    }
+
     final basePaint = Paint()
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.round;
-
-    final setup = zoneSetup;
-    if (setup == null) {
-      // Single-color line: one path, faster to draw.
-      basePaint.color = lineColor;
-      final path = Path();
-      var penDown = false;
-      int? prevTMs;
-      for (final p in points) {
-        if (p.tMs < startMs || p.tMs > endMs) {
-          penDown = false;
-          prevTMs = null;
-          continue;
-        }
-        if (!p.isValidHr) {
-          penDown = false;
-          prevTMs = null;
-          continue;
-        }
-        if (prevTMs != null && p.tMs - prevTMs > _maxSampleGapMs) {
-          penDown = false;
-        }
-        final offset = Offset(g.xForT(p.tMs), g.yForHr(p.hr!));
-        if (penDown) {
-          path.lineTo(offset.dx, offset.dy);
-        } else {
-          path.moveTo(offset.dx, offset.dy);
-          penDown = true;
-        }
-        prevTMs = p.tMs;
-      }
-      canvas.drawPath(path, basePaint);
-      return;
-    }
 
     // Zone-colored: draw each segment between consecutive non-null samples
     // with the color of its starting sample's zone.
@@ -646,6 +798,7 @@ class HrChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(HrChartPainter old) {
     return old.points != points ||
+        old.series != series ||
         old.startMs != startMs ||
         old.endMs != endMs ||
         old.axis.minY != axis.minY ||
@@ -657,7 +810,10 @@ class HrChartPainter extends CustomPainter {
         old.activeHandle != activeHandle ||
         old.zoneSetup != zoneSetup ||
         old.selection?.tMs != selection?.tMs ||
-        old.selection?.hr != selection?.hr;
+        !listEquals(
+          old.selection?.values.map((v) => v.hr).toList(),
+          selection?.values.map((v) => v.hr).toList(),
+        );
   }
 }
 
@@ -668,7 +824,8 @@ class HrChartPainter extends CustomPainter {
 class ZoomableHrChart extends StatefulWidget {
   const ZoomableHrChart({
     super.key,
-    required this.points,
+    this.points = const [],
+    this.series,
     required this.axis,
     required this.fullStartMs,
     required this.fullEndMs,
@@ -683,6 +840,7 @@ class ZoomableHrChart extends StatefulWidget {
   });
 
   final List<HrChartPoint> points;
+  final List<HrChartSeries>? series;
   final HrAxisRange axis;
   final int fullStartMs;
   final int fullEndMs;
@@ -821,6 +979,7 @@ class _ZoomableHrChartState extends State<ZoomableHrChart> {
               onDoubleTap: zoomed ? _resetZoom : null,
               child: HrChart(
                 points: widget.points,
+                series: widget.series,
                 axis: widget.axis,
                 windowStartMs: _start,
                 windowEndMs: _end,
@@ -860,7 +1019,8 @@ class _ZoomableHrChartState extends State<ZoomableHrChart> {
 class TrailingZoomableHrChart extends StatefulWidget {
   const TrailingZoomableHrChart({
     super.key,
-    required this.points,
+    this.points = const [],
+    this.series,
     required this.axis,
     required this.fullStartMs,
     required this.fullEndMs,
@@ -872,6 +1032,7 @@ class TrailingZoomableHrChart extends StatefulWidget {
   });
 
   final List<HrChartPoint> points;
+  final List<HrChartSeries>? series;
   final HrAxisRange axis;
   final int fullStartMs;
   final int fullEndMs;
@@ -967,6 +1128,7 @@ class _TrailingZoomableHrChartState extends State<TrailingZoomableHrChart> {
       onScaleEnd: _onScaleEnd,
       child: HrChart(
         points: widget.points,
+        series: widget.series,
         axis: widget.axis,
         windowStartMs: windowStart,
         windowEndMs: widget.fullEndMs,

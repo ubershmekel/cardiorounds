@@ -243,6 +243,18 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
             onChanged: (enabled) =>
                 ref.read(fakeHrDeviceEnabledProvider.notifier).set(enabled),
           ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.groups_outlined),
+            title: const Text('Record from multiple devices'),
+            subtitle: const Text(
+              'Track more than one heart-rate strap in a single session.',
+            ),
+            value: ref.watch(multiDeviceRecordingEnabledProvider),
+            onChanged: (enabled) => ref
+                .read(multiDeviceRecordingEnabledProvider.notifier)
+                .set(enabled),
+          ),
         ],
       ],
     );
