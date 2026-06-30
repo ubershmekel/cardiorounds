@@ -3,7 +3,7 @@ description:
   "Cardio Rounds: a heart-rate recording app for treadmill, intervals, and BJJ
   rounds."
 publish_to: "none"
-version: 0.1.0+45
+version: 0.1.1+47
 
 environment:
   sdk: ^3.11.5

@@ -62,7 +62,8 @@ tasks:
       - npx prettier --write .
   bump-version:
     desc:
-      Auto-increment the build number in pubspec.yaml (e.g. 1.0.0+3 -> 1.0.0+4)
+      Bump the marketing patch and build in pubspec.yaml (e.g. 0.1.0+46 ->
+      0.1.1+47). The App Store requires a higher marketing version per upload.
     dir: app
     cmds:
       - dart tool/build_metadata.dart bump-version

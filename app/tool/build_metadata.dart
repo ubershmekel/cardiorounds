@@ -4,11 +4,11 @@ Directory get _appDir => File(Platform.script.toFilePath()).parent.parent;
 File get _pubspec => File.fromUri(_appDir.uri.resolve('pubspec.yaml'));
 
 void main(List<String> args) {
-  if (args.length != 1) {
+  if (args.isEmpty) {
     _usage();
   }
 
-  switch (args.single) {
+  switch (args.first) {
     case 'app-version':
       stdout.writeln(_packageVersion());
       return;
@@ -90,22 +90,27 @@ String _dartDefines() {
 void _bumpVersion() {
   final contents = _pubspec.readAsStringSync();
   final match = RegExp(
-    r'^version:\s*([^\s+#]+)(?:\+(\d+))?',
+    r'^version:\s*(\d+)\.(\d+)\.(\d+)(?:\+(\d+))?',
     multiLine: true,
   ).firstMatch(contents);
   if (match == null) {
-    stderr.writeln('Could not find version in pubspec.yaml');
+    stderr.writeln('Could not find an x.y.z version in pubspec.yaml');
     exit(1);
   }
 
-  final name = match.group(1)!;
-  final currentBuild = int.tryParse(match.group(2) ?? '0');
+  final major = int.parse(match.group(1)!);
+  final minor = int.parse(match.group(2)!);
+  final patch = int.parse(match.group(3)!);
+  final currentBuild = int.tryParse(match.group(4) ?? '0');
   if (currentBuild == null) {
     stderr.writeln('Could not parse build number in pubspec.yaml');
     exit(1);
   }
 
-  final nextVersion = '$name+${currentBuild + 1}';
+  // Bump the marketing patch as well as the build number: the App Store
+  // requires both CFBundleShortVersionString and CFBundleVersion to be higher
+  // than the previously approved build.
+  final nextVersion = '$major.$minor.${patch + 1}+${currentBuild + 1}';
   _pubspec.writeAsStringSync(
     contents.replaceRange(match.start, match.end, 'version: $nextVersion'),
   );
