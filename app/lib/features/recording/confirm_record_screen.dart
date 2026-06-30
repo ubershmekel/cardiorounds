@@ -45,11 +45,13 @@ class _Selection {
   _Selection(this.entry);
 
   final _Entry entry;
+  Future<HeartRateSource>? sourceFuture;
   HeartRateSource? source;
   int? bpm;
   StreamSubscription<HrSample>? sampleSub;
   bool connecting = true;
   String? error;
+  bool transferred = false;
 }
 
 class ConfirmRecordScreen extends ConsumerStatefulWidget {
@@ -85,7 +87,8 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   // Single-device mode keeps at most one; multi-device mode keeps several.
   final Map<String, _Selection> _selections = {};
   // Start tapped while the (single) preview is still connecting; honored once
-  // ready. Multi-device mode waits for at least one device to connect instead.
+  // ready. Multi-device mode transfers any still-connecting selected devices to
+  // the recording screen.
   bool _startRequested = false;
   // Committing the selected sources to a new recording (full-screen spinner).
   bool _starting = false;
@@ -96,7 +99,11 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
 
   bool get _busy => _startRequested || _starting;
   bool get _hasSelection => _selections.isNotEmpty;
-  bool get _anyConnected => _selections.values.any((s) => s.source != null);
+  bool get _canStartMulti =>
+      _hasSelection &&
+      _selections.values.every(
+        (s) => s.source != null || (s.connecting && s.sourceFuture != null),
+      );
 
   @override
   void initState() {
@@ -230,16 +237,23 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
     });
 
     try {
-      final source = entry.isFake
-          ? FakeHeartRateSource(
-              deviceName: entry.name,
-              centerBpm: entry.fakeCenterBpm,
+      final sourceFuture = entry.isFake
+          ? Future<HeartRateSource>.value(
+              FakeHeartRateSource(
+                deviceName: entry.name,
+                centerBpm: entry.fakeCenterBpm,
+              ),
             )
-          : await ref.read(hrConnectorProvider)(entry.id, entry.name);
+          : ref.read(hrConnectorProvider)(entry.id, entry.name);
+      selection.sourceFuture = sourceFuture;
+      if (mounted && _selections.containsKey(entry.id)) {
+        setState(() {});
+      }
+      final source = await sourceFuture;
       // The selection may have been removed (or the screen closed) while
       // connecting.
       if (!mounted || !_selections.containsKey(entry.id)) {
-        await source.dispose();
+        if (!selection.transferred) await source.dispose();
         return;
       }
       setState(() {
@@ -286,9 +300,9 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   void _onStart() {
     if (_starting || _startRequested || !_hasSelection) return;
     if (_multiEnabled) {
-      // Commit the devices that have connected; Start is disabled until at
-      // least one has (see build).
-      if (_anyConnected) _commitStart();
+      // Multi-device means every selected device is part of the recording. Any
+      // still-connecting selections move forward and connect on the live screen.
+      if (_canStartMulti) _commitStart();
       return;
     }
     // Single-device: don't make the user wait for pairing — remember the intent
@@ -302,8 +316,13 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
   }
 
   Future<void> _commitStart() async {
-    final ready = _selections.values.where((s) => s.source != null).toList();
-    if (ready.isEmpty) return;
+    final selected = _multiEnabled
+        ? _selections.values.toList()
+        : _selections.values.where((s) => s.source != null).toList();
+    if (selected.isEmpty) return;
+    if (selected.any((s) => s.source == null && s.sourceFuture == null)) {
+      return;
+    }
     setState(() {
       _starting = true;
       _error = null;
@@ -316,13 +335,13 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       // One device id per selected source, in order, so the returned set ids
       // line up. Fake source -> null device.
       final deviceIds = <int?>[];
-      for (final s in ready) {
+      for (final s in selected) {
         if (s.entry.isFake) {
           deviceIds.add(null);
         } else {
           final device = await db.upsertDevice(
             platformId: s.entry.id,
-            name: s.source!.deviceName,
+            name: s.source?.deviceName ?? s.entry.name,
           );
           deviceIds.add(device.id);
         }
@@ -339,16 +358,30 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       // Handoff: from here the recording controller owns the connections — no
       // disconnect, no reconnect. Stop our preview listeners before relinquishing.
       final sources = <RecordingSource>[];
-      for (var i = 0; i < ready.length; i++) {
-        await ready[i].sampleSub?.cancel();
-        ready[i].sampleSub = null;
+      for (var i = 0; i < selected.length; i++) {
+        final selection = selected[i];
+        await selection.sampleSub?.cancel();
+        selection.sampleSub = null;
+        final source = selection.source;
         sources.add(
-          RecordingSource(source: ready[i].source!, setId: started.hrSetIds[i]),
+          source == null
+              ? RecordingSource.pending(
+                  sourceFuture: selection.sourceFuture!,
+                  setId: started.hrSetIds[i],
+                  deviceName: selection.entry.name,
+                  devicePlatformId: selection.entry.isFake
+                      ? null
+                      : selection.entry.id,
+                )
+              : RecordingSource(source: source, setId: started.hrSetIds[i]),
         );
       }
       // If the screen is gone, keep ownership (dispose() will tear it down).
       if (!mounted) return;
       // Ownership transferred — clear so dispose() doesn't tear these down.
+      for (final selection in selected) {
+        selection.transferred = true;
+      }
       _selections.clear();
       ref.read(pendingRecordingProvider.notifier).state = sources;
       ref.read(activeRecordingIdProvider.notifier).state = started.activityId;
@@ -386,7 +419,7 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
         _hasSelection &&
         !_starting &&
         !_startRequested &&
-        (!_multiEnabled || _anyConnected);
+        (!_multiEnabled || _canStartMulti);
     return Scaffold(
       appBar: AppBar(title: const Text('Start recording')),
       body: ListView(
@@ -447,9 +480,24 @@ class _ConfirmRecordScreenState extends ConsumerState<ConfirmRecordScreen> {
       ];
     }
     return const [
-      _Entry(id: '__fake_1__', name: 'Simulated strap 1', isFake: true, fakeCenterBpm: 128),
-      _Entry(id: '__fake_2__', name: 'Simulated strap 2', isFake: true, fakeCenterBpm: 148),
-      _Entry(id: '__fake_3__', name: 'Simulated strap 3', isFake: true, fakeCenterBpm: 112),
+      _Entry(
+        id: '__fake_1__',
+        name: 'Simulated strap 1',
+        isFake: true,
+        fakeCenterBpm: 128,
+      ),
+      _Entry(
+        id: '__fake_2__',
+        name: 'Simulated strap 2',
+        isFake: true,
+        fakeCenterBpm: 148,
+      ),
+      _Entry(
+        id: '__fake_3__',
+        name: 'Simulated strap 3',
+        isFake: true,
+        fakeCenterBpm: 112,
+      ),
     ];
   }
 

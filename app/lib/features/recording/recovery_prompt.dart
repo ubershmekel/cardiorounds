@@ -46,9 +46,9 @@ class _RecoveryPromptState extends ConsumerState<RecoveryPrompt> {
 
     // Measure "ago" from the last sample we actually captured, not the start —
     // the gap since the recording died is what the user cares about.
-    final lastTMs = await ref.read(databaseProvider).lastSampleTMs(
-      recording.activityId,
-    );
+    final lastTMs = await ref
+        .read(databaseProvider)
+        .lastSampleTMs(recording.activityId);
     if (!mounted) return;
     final interruptedAtMs = recording.startedAtMs + (lastTMs ?? 0);
 
@@ -146,7 +146,8 @@ class _RecoveryPromptState extends ConsumerState<RecoveryPrompt> {
 
     if (!mounted) {
       for (final s in sources) {
-        await s.source.dispose();
+        final source = s.source;
+        if (source != null) await source.dispose();
       }
       return;
     }
@@ -187,7 +188,9 @@ class _RecoveryPromptState extends ConsumerState<RecoveryPrompt> {
       _handled = false;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Couldn\'t save the interrupted recording')),
+          const SnackBar(
+            content: Text('Couldn\'t save the interrupted recording'),
+          ),
         );
       }
       return;

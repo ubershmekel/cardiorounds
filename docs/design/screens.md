@@ -73,10 +73,10 @@ list becomes a **multi-select**: tapping a row toggles it in or out of the
 selection instead of replacing the previous pick. Each selected row opens its
 own live preview and shows its BPM (see below). Scanning keeps running while
 devices are selected, so other rows are not greyed out, and new straps can still
-be added. The top **Start** button is enabled once at least one device is
-selected and commits to **all** of them. With the toggle off, selection is
-single-device exactly as described below. See
-[multi-device-recording.md](multi-device-recording.md).
+be added. The top **Start** button commits to **all selected devices** and is
+enabled once each selected device is either connected or still actively
+connecting. With the toggle off, selection is single-device exactly as described
+below. See [multi-device-recording.md](multi-device-recording.md).
 
 #### Ordering (stable, never reshuffles)
 
@@ -106,14 +106,16 @@ the user confirm sensor contact before committing. While a device is selected
 In multiple-device mode the same live-preview connection happens per selected
 device, but several previews are held at once, scanning keeps running, and
 tapping a row toggles only that device (others are unaffected). A device that
-fails to connect shows an error on its own row and can be retried.
+fails to connect shows an error on its own row and can be retried. Start moves
+every selected device into the recording, including devices that are still
+connecting, so a selected device is never silently left out.
 
-The top **Start** button is enabled as soon as a device is selected — it does
-**not** wait for pairing or a first reading. Tapping it reuses the already-open
-connection (no reconnect) and hands it straight to the recording screen, which
-owns the connecting / reconnecting display. If Start is tapped before the
-preview connection finishes, the start is honored as soon as the connection is
-ready.
+In single-device mode, the top **Start** button is enabled as soon as a device
+is selected — it does **not** wait for pairing or a first reading. Tapping it
+reuses the already-open connection (no reconnect) and hands it straight to the
+recording screen, which owns the connecting / reconnecting display. If Start is
+tapped before the preview connection finishes, the start is honored as soon as
+the connection is ready.
 
 ### Auto-selection of a known device
 
@@ -157,8 +159,9 @@ to each **best-effort** — it continues with whichever reconnect, and only fail
 if none do. See [multi-device-recording.md](multi-device-recording.md).
 
 **Save as finished** — closes the interrupted activity out as a completed
-workout (duration set from the last recorded sample). The data is kept, not
-deleted; the user can review or delete it from history like any other workout.
+workout (duration set from the primary stream's last recorded sample). The data
+is kept, not deleted; the user can review or delete it from history like any
+other workout.
 
 The samples recorded before the interruption are never lost — they are written
 to the database as they arrive, so recovery only decides whether to keep

@@ -111,25 +111,27 @@ within an activity. This is the grain that lets a single session record from
 several HR devices at once, and leaves room for other signals (location, SpO2,
 elevation) without reworking how samples are stored.
 
-- **`kind` lives on the parent** so we can list "every HR stream in this activity"
-  without touching child tables. Which `*_samples` table a set's rows live in is
-  convention keyed off `kind`, not an enforced foreign key. We deliberately do
-  *not* add `CHECK (kind IN (...))` — a hard check would force a table rebuild
-  every time a new signal kind is introduced.
+- **`kind` lives on the parent** so we can list "every HR stream in this
+  activity" without touching child tables. Which `*_samples` table a set's rows
+  live in is convention keyed off `kind`, not an enforced foreign key. We
+  deliberately do _not_ add `CHECK (kind IN (...))` — a hard check would force a
+  table rebuild every time a new signal kind is introduced.
 - **Per-stream athlete is intentionally deferred.** A second device may be a
-  second sensor on the same athlete *or* a second person in a group session. When
-  that distinction needs storage, add a nullable `sample_sets.athlete_id`; no
-  sample table changes.
-- **Device deletion stays graceful.** `device_id` is on `sample_sets` and off the
-  sample primary key, so `ON DELETE SET NULL` still works. (Putting `device_id`
-  in a `WITHOUT ROWID` sample PK was rejected: PK columns cannot be NULL.)
+  second sensor on the same athlete _or_ a second person in a group session.
+  When that distinction needs storage, add a nullable `sample_sets.athlete_id`;
+  no sample table changes.
+- **Device deletion stays graceful.** `device_id` is on `sample_sets` and off
+  the sample primary key, so `ON DELETE SET NULL` still works. (Putting
+  `device_id` in a `WITHOUT ROWID` sample PK was rejected: PK columns cannot be
+  NULL.)
 
 ### Activity-level shape with multiple HR sets
 
 `shape_start` / `shape_mid` / `shape_end` are computed from the **primary HR set
 only** (the first `kind='hr'` set, i.e. lowest `sample_sets.id`). Aggregating
-across multiple HR sets would mix duplicate timestamps from different devices and
-corrupt the thirds. If per-stream shape is ever needed it moves to `sample_sets`.
+across multiple HR sets would mix duplicate timestamps from different devices
+and corrupt the thirds. If per-stream shape is ever needed it moves to
+`sample_sets`.
 
 ### Marker kinds
 
@@ -144,8 +146,8 @@ A marker with `duration_ms = NULL` is a point in time. A marker with a non-NULL
 | `moment`   | point | Freeform tap during recording, with optional `name`.                                                                                        |
 
 Markers are **activity-level** (one timeline per session). This is correct for
-`workout`, and acceptable for `round` / `recovery` while sets share a clock. If a
-single activity ever represents multiple people, analysis markers (`recovery`,
+`workout`, and acceptable for `round` / `recovery` while sets share a clock. If
+a single activity ever represents multiple people, analysis markers (`recovery`,
 auto-`round`) gain a nullable `set_id` for per-stream scope; until then we don't
 generate per-person markers.
 
@@ -164,7 +166,8 @@ span marker window when one exists, otherwise over the full `duration_ms`.
 ### Migration v1 → v2 (introduce `sample_sets`)
 
 v1 stored one implicit HR stream per activity (`activities.device_id` +
-`samples` keyed by `activity_id`). v2 splits that into `sample_sets` + `hr_samples`:
+`samples` keyed by `activity_id`). v2 splits that into `sample_sets` +
+`hr_samples`:
 
 ```sql
 -- One HR set per existing activity. Reuse the activity id as the set id so the

@@ -56,7 +56,9 @@ CREATE TABLE markers (
 AppDatabase _openMigratedFromV1() {
   final raw = sqlite3.openInMemory();
   raw.execute(_v1Schema);
-  raw.execute("INSERT INTO athletes (id, name, created_at_ms) VALUES (1, '', 0)");
+  raw.execute(
+    "INSERT INTO athletes (id, name, created_at_ms) VALUES (1, '', 0)",
+  );
   raw.execute(
     "INSERT INTO devices (id, platform_id, name, last_connected_at_ms) "
     "VALUES (1, 'strap-1', 'Polar H10', 0)",
@@ -89,15 +91,20 @@ void main() {
       await db.close();
     });
 
-    test('creates one HR sample_set per activity, reusing the activity id', () async {
-      final sets = await db
-          .customSelect('SELECT id, activity_id, device_id, kind FROM sample_sets ORDER BY id')
-          .get();
-      expect(sets.map((r) => r.data), [
-        {'id': 10, 'activity_id': 10, 'device_id': 1, 'kind': 'hr'},
-        {'id': 20, 'activity_id': 20, 'device_id': null, 'kind': 'hr'},
-      ]);
-    });
+    test(
+      'creates one HR sample_set per activity, reusing the activity id',
+      () async {
+        final sets = await db
+            .customSelect(
+              'SELECT id, activity_id, device_id, kind FROM sample_sets ORDER BY id',
+            )
+            .get();
+        expect(sets.map((r) => r.data), [
+          {'id': 10, 'activity_id': 10, 'device_id': 1, 'kind': 'hr'},
+          {'id': 20, 'activity_id': 20, 'device_id': null, 'kind': 'hr'},
+        ]);
+      },
+    );
 
     test('re-points every sample to its set, losing none', () async {
       final count = await db
@@ -112,18 +119,27 @@ void main() {
       expect(samples.map((s) => (s.tMs, s.hr)), [(1000, 100), (2000, 110)]);
     });
 
-    test('drops the old samples table and the activities.device_id column', () async {
-      final tables = await db
-          .customSelect("SELECT name FROM sqlite_master WHERE type='table' AND name='samples'")
-          .get();
-      expect(tables, isEmpty);
+    test(
+      'drops the old samples table and the activities.device_id column',
+      () async {
+        final tables = await db
+            .customSelect(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name='samples'",
+            )
+            .get();
+        expect(tables, isEmpty);
 
-      final cols = await db.customSelect('PRAGMA table_info(activities)').get();
-      expect(cols.any((c) => c.data['name'] == 'device_id'), isFalse);
-    });
+        final cols = await db
+            .customSelect('PRAGMA table_info(activities)')
+            .get();
+        expect(cols.any((c) => c.data['name'] == 'device_id'), isFalse);
+      },
+    );
 
     test('passes foreign_key_check after migrating', () async {
-      final violations = await db.customSelect('PRAGMA foreign_key_check').get();
+      final violations = await db
+          .customSelect('PRAGMA foreign_key_check')
+          .get();
       expect(violations, isEmpty);
     });
   });

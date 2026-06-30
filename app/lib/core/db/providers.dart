@@ -3,14 +3,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../hr/hr_source.dart';
 import 'database.dart';
 
-/// A live HR source paired with the [HrSampleRow] set it records into. The
-/// Confirm Record screen and the recovery flow build a list of these and hand
-/// it to the recording screen, which owns the connections from then on.
+/// One selected HR source paired with the [HrSampleRow] set it records into.
+/// It may already be connected, or it may still be connecting when Start moves
+/// from Confirm Record to the recording screen.
 class RecordingSource {
-  const RecordingSource({required this.source, required this.setId});
+  RecordingSource({required HeartRateSource source, required this.setId})
+    : source = source,
+      sourceFuture = Future.value(source),
+      deviceName = source.deviceName,
+      devicePlatformId = source.devicePlatformId;
 
-  final HeartRateSource source;
+  RecordingSource.pending({
+    required this.sourceFuture,
+    required this.setId,
+    required this.deviceName,
+    required this.devicePlatformId,
+  }) : source = null;
+
+  final HeartRateSource? source;
+  final Future<HeartRateSource> sourceFuture;
   final int setId;
+  final String deviceName;
+  final String? devicePlatformId;
 }
 
 /// Sources chosen on the Confirm Record screen (one per device), consumed by the

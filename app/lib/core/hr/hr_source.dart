@@ -5,7 +5,16 @@ class HrSample {
   final DateTime at;
 }
 
-enum HrSourceStatusKind { connected, reconnecting, disconnected, disposed }
+enum HrSourceStatusKind {
+  /// Connecting for the first time: selected on Confirm Record and handed to
+  /// the recording screen before the connection finished. Distinct from
+  /// [reconnecting], which is a previously-live source that dropped.
+  connecting,
+  connected,
+  reconnecting,
+  disconnected,
+  disposed,
+}
 
 class HrSourceStatus {
   const HrSourceStatus({

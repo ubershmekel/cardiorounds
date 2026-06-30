@@ -40,7 +40,9 @@ class HrSeries {
   final List<HrSampleRow> samples;
 }
 
-@DriftDatabase(tables: [Athletes, Devices, Activities, SampleSets, HrSamples, Markers])
+@DriftDatabase(
+  tables: [Athletes, Devices, Activities, SampleSets, HrSamples, Markers],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting(super.executor);
@@ -216,8 +218,7 @@ class AppDatabase extends _$AppDatabase {
     final row =
         await (select(sampleSets)
               ..where(
-                (s) =>
-                    s.activityId.equals(activityId) & s.kind.equals('hr'),
+                (s) => s.activityId.equals(activityId) & s.kind.equals('hr'),
               )
               ..orderBy([(s) => OrderingTerm.asc(s.id)])
               ..limit(1))
@@ -291,17 +292,19 @@ class AppDatabase extends _$AppDatabase {
   /// samples by time), each carrying the device name when the device is still
   /// known. Sets with no samples yet are omitted. Used by the multi-series chart.
   Stream<List<HrSeries>> watchHrSeries(int activityId) {
-    final query = select(hrSamples).join([
-      innerJoin(sampleSets, sampleSets.id.equalsExp(hrSamples.setId)),
-      leftOuterJoin(devices, devices.id.equalsExp(sampleSets.deviceId)),
-    ])
-      ..where(
-        sampleSets.activityId.equals(activityId) & sampleSets.kind.equals('hr'),
-      )
-      ..orderBy([
-        OrderingTerm.asc(sampleSets.id),
-        OrderingTerm.asc(hrSamples.tMs),
-      ]);
+    final query =
+        select(hrSamples).join([
+            innerJoin(sampleSets, sampleSets.id.equalsExp(hrSamples.setId)),
+            leftOuterJoin(devices, devices.id.equalsExp(sampleSets.deviceId)),
+          ])
+          ..where(
+            sampleSets.activityId.equals(activityId) &
+                sampleSets.kind.equals('hr'),
+          )
+          ..orderBy([
+            OrderingTerm.asc(sampleSets.id),
+            OrderingTerm.asc(hrSamples.tMs),
+          ]);
     return query.watch().map((rows) {
       final bySet = <int, HrSeries>{};
       final order = <int>[];
@@ -437,14 +440,10 @@ class AppDatabase extends _$AppDatabase {
     return row?.tMs;
   }
 
-  Future<void> insertHrSample({
-    required int setId,
-    required int tMs,
-    int? hr,
-  }) {
-    return into(hrSamples).insert(
-      HrSamplesCompanion.insert(setId: setId, tMs: tMs, hr: Value(hr)),
-    );
+  Future<void> insertHrSample({required int setId, required int tMs, int? hr}) {
+    return into(
+      hrSamples,
+    ).insert(HrSamplesCompanion.insert(setId: setId, tMs: tMs, hr: Value(hr)));
   }
 
   Stream<Marker?> watchWorkoutMarker(int activityId) {

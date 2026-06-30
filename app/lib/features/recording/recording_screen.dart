@@ -44,6 +44,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
 
   String _signalTitle(DeviceRecordingState device) {
     return switch (device.sourceStatus) {
+      HrSourceStatusKind.connecting => 'Connecting to strap',
       HrSourceStatusKind.reconnecting => 'Reconnecting to strap',
       HrSourceStatusKind.disconnected => 'Heart-rate signal lost',
       HrSourceStatusKind.disposed => 'Heart-rate source closed',
@@ -54,6 +55,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   String _signalSubtitle(DeviceRecordingState device, DateTime now) {
     final attempt = device.reconnectAttempt;
     final age = _formatSignalAge(device.sourceStatusAge(now));
+    if (device.sourceStatus == HrSourceStatusKind.connecting) {
+      return 'Waiting for connection';
+    }
     if (device.sourceStatus == HrSourceStatusKind.reconnecting) {
       return attempt == null
           ? 'Signal missing for $age'
@@ -107,7 +111,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final chartHeight = (constraints.maxHeight * 0.36).clamp(220.0, 320.0);
+          final chartHeight = (constraints.maxHeight * 0.36).clamp(
+            220.0,
+            320.0,
+          );
           return SingleChildScrollView(
             child: Center(
               child: ConstrainedBox(
@@ -252,9 +259,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
           label: device.deviceName,
         ),
     ];
-    final allHr = [
-      for (final s in allSeries) ...s.samples.map((r) => r.hr),
-    ];
+    final allHr = [for (final s in allSeries) ...s.samples.map((r) => r.hr)];
     final stats = HrStats.fromHeartRates(allHr);
     final axis = HrAxisRange.forStats(minHr: stats.min, maxHr: stats.max);
     final allTs = [for (final s in allSeries) ...s.samples.map((r) => r.tMs)];

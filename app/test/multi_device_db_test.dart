@@ -9,24 +9,27 @@ void main() {
     setUp(() => db = AppDatabase.forTesting(NativeDatabase.memory()));
     tearDown(() async => db.close());
 
-    test('startActivityWithDevices makes one HR set per device, in order', () async {
-      final athlete = await db.ensureDefaultAthlete();
-      final d1 = await db.upsertDevice(platformId: 'strap-1', name: 'Polar');
-      final d2 = await db.upsertDevice(platformId: 'strap-2', name: 'Wahoo');
+    test(
+      'startActivityWithDevices makes one HR set per device, in order',
+      () async {
+        final athlete = await db.ensureDefaultAthlete();
+        final d1 = await db.upsertDevice(platformId: 'strap-1', name: 'Polar');
+        final d2 = await db.upsertDevice(platformId: 'strap-2', name: 'Wahoo');
 
-      final started = await db.startActivityWithDevices(
-        athleteId: athlete.id,
-        startedAtMs: 1000,
-        deviceIds: [d1.id, null, d2.id], // middle one is the fake source
-      );
+        final started = await db.startActivityWithDevices(
+          athleteId: athlete.id,
+          startedAtMs: 1000,
+          deviceIds: [d1.id, null, d2.id], // middle one is the fake source
+        );
 
-      expect(started.hrSetIds, hasLength(3));
-      expect(started.hrSetId, started.hrSetIds.first); // primary == first
-      final sets = await db.hrSetsForActivity(started.activityId);
-      expect(sets.map((s) => s.id), started.hrSetIds);
-      expect(sets.map((s) => s.deviceId), [d1.id, null, d2.id]);
-      expect(sets.every((s) => s.kind == 'hr'), isTrue);
-    });
+        expect(started.hrSetIds, hasLength(3));
+        expect(started.hrSetId, started.hrSetIds.first); // primary == first
+        final sets = await db.hrSetsForActivity(started.activityId);
+        expect(sets.map((s) => s.id), started.hrSetIds);
+        expect(sets.map((s) => s.deviceId), [d1.id, null, d2.id]);
+        expect(sets.every((s) => s.kind == 'hr'), isTrue);
+      },
+    );
 
     test('watchHrSeries groups samples per set with device names', () async {
       final athlete = await db.ensureDefaultAthlete();

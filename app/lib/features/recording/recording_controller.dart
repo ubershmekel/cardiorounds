@@ -123,9 +123,11 @@ class RecordingController extends StateNotifier<RecordingState> {
              for (final s in sources)
                DeviceRecordingState(
                  setId: s.setId,
-                 deviceName: s.source.deviceName,
+                 deviceName: s.deviceName,
                  currentBpm: null,
-                 sourceStatus: HrSourceStatusKind.connected,
+                 sourceStatus: s.source == null
+                     ? HrSourceStatusKind.connecting
+                     : HrSourceStatusKind.connected,
                  sourceStatusAt: DateTime.now(),
                  sourceStatusMessage: null,
                  reconnectAttempt: null,
@@ -134,13 +136,14 @@ class RecordingController extends StateNotifier<RecordingState> {
            stopped: false,
          ),
        ) {
-    final names = sources.map((s) => s.source.deviceName).join(', ');
+    _resolvedSources = [for (final s in sources) s.source];
+    final names = sources.map((s) => s.deviceName).join(', ');
     final verb = resumeStartedAt == null ? 'Started' : 'Resumed';
     appLog('Recording', '$verb activity $activityId on $names');
     _writeSentinel(activityId);
     _liveActivity.start(
       activityId: activityId,
-      deviceName: sources.first.source.deviceName,
+      deviceName: sources.first.deviceName,
       startedAt: state.startedAt,
     );
     _updateLiveActivity();
@@ -151,11 +154,12 @@ class RecordingController extends StateNotifier<RecordingState> {
         s.setId >= 0 ? Future.value(s.setId) : db.primaryHrSetId(activityId),
     ];
     for (var i = 0; i < sources.length; i++) {
-      final index = i;
-      _sampleSubs.add(sources[i].source.samples.listen((s) => _onSample(index, s)));
-      _statusSubs.add(
-        sources[i].source.status.listen((s) => _onSourceStatus(index, s)),
-      );
+      final source = sources[i].source;
+      if (source == null) {
+        _attachSourceWhenReady(i, sources[i].sourceFuture);
+      } else {
+        _attachSource(i, source);
+      }
     }
 
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -199,6 +203,7 @@ class RecordingController extends StateNotifier<RecordingState> {
   final ZoneSetup? _zoneSetup;
   final RecordingLiveActivity _liveActivity = const RecordingLiveActivity();
   late final List<Future<int>> _setIds;
+  late final List<HeartRateSource?> _resolvedSources;
   final List<StreamSubscription<HrSample>> _sampleSubs = [];
   final List<StreamSubscription<HrSourceStatus>> _statusSubs = [];
   late final Timer _ticker;
@@ -213,8 +218,8 @@ class RecordingController extends StateNotifier<RecordingState> {
   void _writeSentinel(int activityId) {
     final devices = [
       for (final s in sources)
-        if (s.source.devicePlatformId case final platformId?)
-          RecordedDevice(platformId: platformId, name: s.source.deviceName),
+        if (s.devicePlatformId case final platformId?)
+          RecordedDevice(platformId: platformId, name: s.deviceName),
     ];
     if (devices.isEmpty) return;
     _sentinelWrite = sentinel.write(
@@ -240,13 +245,57 @@ class RecordingController extends StateNotifier<RecordingState> {
     _updateLiveActivity();
   }
 
+  void _attachSource(int index, HeartRateSource source) {
+    _sampleSubs.add(source.samples.listen((s) => _onSample(index, s)));
+    _statusSubs.add(source.status.listen((s) => _onSourceStatus(index, s)));
+  }
+
+  Future<void> _attachSourceWhenReady(
+    int index,
+    Future<HeartRateSource> sourceFuture,
+  ) async {
+    try {
+      final source = await sourceFuture;
+      if (!mounted || state.stopped) {
+        await source.dispose();
+        return;
+      }
+      _resolvedSources[index] = source;
+      appLog('Recording', 'Signal connected for ${source.deviceName}');
+      _updateDevice(
+        index,
+        (d) => d.copyWith(
+          sourceStatus: HrSourceStatusKind.connected,
+          sourceStatusAt: DateTime.now(),
+          clearSourceStatusMessage: true,
+          clearReconnectAttempt: true,
+        ),
+      );
+      _attachSource(index, source);
+    } catch (e) {
+      if (!mounted || state.stopped) return;
+      appLog('Recording', 'Signal failed for ${sources[index].deviceName}: $e');
+      _updateDevice(
+        index,
+        (d) => d.copyWith(
+          bpmIsNull: true,
+          sourceStatus: HrSourceStatusKind.disconnected,
+          sourceStatusAt: DateTime.now(),
+          sourceStatusMessage: 'Could not connect',
+          clearReconnectAttempt: true,
+        ),
+      );
+    }
+  }
+
   Future<void> _onSample(int index, HrSample sample) async {
     if (state.stopped) return;
-    final source = sources[index].source;
+    final sourceName =
+        _resolvedSources[index]?.deviceName ?? sources[index].deviceName;
     if (sample.bpm == null) {
       appLog(
         'Recording',
-        'Null BPM received from ${source.deviceName}; device may have disconnected',
+        'Null BPM received from $sourceName; device may have disconnected',
       );
     }
     _sampleCount++;
@@ -275,19 +324,20 @@ class RecordingController extends StateNotifier<RecordingState> {
 
   void _onSourceStatus(int index, HrSourceStatus status) {
     if (state.stopped) return;
-    final source = sources[index].source;
+    final sourceName =
+        _resolvedSources[index]?.deviceName ?? sources[index].deviceName;
     if (status.kind == HrSourceStatusKind.reconnecting) {
       appLog(
         'Recording',
-        'Signal reconnecting for ${source.deviceName}'
+        'Signal reconnecting for $sourceName'
             '${status.attempt == null ? '' : ' (attempt ${status.attempt})'}',
       );
     } else if (status.kind == HrSourceStatusKind.connected) {
-      appLog('Recording', 'Signal connected for ${source.deviceName}');
+      appLog('Recording', 'Signal connected for $sourceName');
     } else if (status.kind == HrSourceStatusKind.disconnected) {
       appLog(
         'Recording',
-        'Signal lost for ${source.deviceName}: ${status.message ?? 'unknown'}',
+        'Signal lost for $sourceName: ${status.message ?? 'unknown'}',
       );
     }
     _updateDevice(index, (d) {
@@ -312,6 +362,7 @@ class RecordingController extends StateNotifier<RecordingState> {
     final primary = state.primary;
     final status = switch (primary.sourceStatus) {
       HrSourceStatusKind.connected => 'Recording',
+      HrSourceStatusKind.connecting => 'Connecting',
       HrSourceStatusKind.reconnecting => 'Reconnecting',
       HrSourceStatusKind.disconnected => 'Signal lost',
       HrSourceStatusKind.disposed => 'Stopped',
@@ -375,9 +426,9 @@ class RecordingController extends StateNotifier<RecordingState> {
     } catch (e) {
       appLog('Recording', 'Live activity end error: $e');
     }
-    for (final s in sources) {
+    for (final source in _resolvedSources.whereType<HeartRateSource>()) {
       try {
-        await s.source.dispose();
+        await source.dispose();
       } catch (e) {
         appLog('Recording', 'Source dispose error: $e');
       }
@@ -393,8 +444,8 @@ class RecordingController extends StateNotifier<RecordingState> {
         sub.cancel();
       }
       _liveActivity.end(activityId: state.activityId);
-      for (final s in sources) {
-        s.source.dispose();
+      for (final source in _resolvedSources.whereType<HeartRateSource>()) {
+        source.dispose();
       }
     }
     super.dispose();

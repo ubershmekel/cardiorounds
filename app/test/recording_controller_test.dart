@@ -82,4 +82,61 @@ void main() {
     // stop() cancels timers/subscriptions so nothing outlives the test.
     await controller.stop();
   });
+
+  test('records a pending source when it connects after start', () async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final athlete = await db.ensureDefaultAthlete();
+    final started = await db.startActivityWithDevices(
+      athleteId: athlete.id,
+      startedAtMs: 0,
+      deviceIds: [null, null],
+    );
+
+    final a = _FakeSource('Strap A');
+    final bCompleter = Completer<HeartRateSource>();
+    final controller = RecordingController(
+      db: db,
+      sources: [
+        RecordingSource(source: a, setId: started.hrSetIds[0]),
+        RecordingSource.pending(
+          sourceFuture: bCompleter.future,
+          setId: started.hrSetIds[1],
+          deviceName: 'Strap B',
+          devicePlatformId: null,
+        ),
+      ],
+      activityId: started.activityId,
+    );
+
+    expect(controller.state.devices[1].deviceName, 'Strap B');
+    expect(
+      controller.state.devices[1].sourceStatus,
+      HrSourceStatusKind.connecting,
+    );
+
+    a.emit(120);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(controller.state.devices[0].currentBpm, 120);
+    expect(controller.state.devices[1].currentBpm, isNull);
+
+    final b = _FakeSource('Strap B');
+    bCompleter.complete(b);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(
+      controller.state.devices[1].sourceStatus,
+      HrSourceStatusKind.connected,
+    );
+
+    b.emit(95);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(controller.state.devices[1].currentBpm, 95);
+
+    final series = await db.watchHrSeries(started.activityId).first;
+    expect(series, hasLength(2));
+    expect(series[0].samples.single.hr, 120);
+    expect(series[1].samples.single.hr, 95);
+
+    await controller.stop();
+  });
 }

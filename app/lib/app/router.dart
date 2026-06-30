@@ -46,7 +46,9 @@ GoRouter buildRouter(Ref ref) {
                 // recording screen so a second recording can't be started.
                 redirect: (_, _) {
                   final activeId = ref.read(activeRecordingIdProvider);
-                  return activeId != null ? '/record/recording/$activeId' : null;
+                  return activeId != null
+                      ? '/record/recording/$activeId'
+                      : null;
                 },
                 builder: (_, _) => const ConfirmRecordScreen(),
                 routes: [

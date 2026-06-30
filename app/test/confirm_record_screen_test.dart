@@ -124,7 +124,12 @@ void main() {
     for (final s
         in container.read(pendingRecordingProvider) ??
             const <RecordingSource>[]) {
-      await s.source.dispose();
+      try {
+        final source = s.source ?? await s.sourceFuture;
+        await source.dispose();
+      } catch (_) {
+        // A failed pending connection has no source to clean up.
+      }
     }
     container.dispose();
     // The DB is created here and injected via overrideWithValue, so the
@@ -213,7 +218,10 @@ void main() {
     await tap(tester, find.widgetWithText(FilledButton, 'Start'));
 
     expect(find.textContaining('recording-'), findsOneWidget);
-    expect(container.read(pendingRecordingProvider)!.single.source, same(connected));
+    expect(
+      container.read(pendingRecordingProvider)!.single.source,
+      same(connected),
+    );
     expect(container.read(activeRecordingIdProvider), isNotNull);
     expect(connected.disposed, isFalse); // ownership transferred, not disposed
     expect(await db.allDevices(), hasLength(1)); // device remembered
@@ -250,6 +258,55 @@ void main() {
     expect(await db.hrSetsForActivity(activityId), hasLength(2));
     expect(await db.allDevices(), hasLength(2)); // both remembered
   });
+
+  testWidgets(
+    'multi-device: Start includes a still-connecting selected strap',
+    (tester) async {
+      await setUpContainer(multiDevice: true);
+      final completers = <String, Completer<HeartRateSource>>{};
+      connect = (id, name) {
+        final completer = Completer<HeartRateSource>();
+        completers[id] = completer;
+        return completer.future;
+      };
+
+      await tester.pumpWidget(buildApp());
+      await settle(tester);
+      scanner.emit([_device('Strap A'), _device('Strap B')]);
+      await settle(tester);
+
+      await tap(tester, find.text('Strap A'));
+      await tap(tester, find.text('Strap B'));
+
+      await tester.runAsync(() async {
+        completers['Strap A']!.complete(FakeSource('Strap A', 'Strap A'));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pump();
+      await settle(tester);
+
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Start'))
+            .onPressed,
+        isNotNull,
+      );
+
+      await tap(tester, find.widgetWithText(FilledButton, 'Start'));
+
+      expect(find.textContaining('recording-'), findsOneWidget);
+      final pending = container.read(pendingRecordingProvider)!;
+      expect(pending, hasLength(2));
+      expect(pending[0].source, isNotNull);
+      expect(pending[1].source, isNull);
+      expect(pending[1].deviceName, 'Strap B');
+
+      await tester.runAsync(() async {
+        completers['Strap B']!.complete(FakeSource('Strap B', 'Strap B'));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+    },
+  );
 
   testWidgets('Start tapped before the connection is ready fires once ready', (
     tester,

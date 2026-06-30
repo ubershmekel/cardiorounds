@@ -630,11 +630,7 @@ class HrChartPainter extends CustomPainter {
     canvas.drawLine(Offset(x, g.plotTop), Offset(x, g.plotBottom), linePaint);
 
     for (final v in s.values) {
-      canvas.drawCircle(
-        Offset(x, g.yForHr(v.hr)),
-        3,
-        Paint()..color = v.color,
-      );
+      canvas.drawCircle(Offset(x, g.yForHr(v.hr)), 3, Paint()..color = v.color);
     }
   }
 

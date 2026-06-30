@@ -31,7 +31,9 @@
 
 ## iOS builds & deployment
 
-- **Xcode Cloud handles CI/CD.** Pushing to `main` triggers a cloud build and upload to App Store Connect automatically — no need to run `flutter build ipa` or upload manually.
+- **Xcode Cloud handles CI/CD.** Pushing to `main` triggers a cloud build and
+  upload to App Store Connect automatically — no need to run `flutter build ipa`
+  or upload manually.
 
 ## Logging
 

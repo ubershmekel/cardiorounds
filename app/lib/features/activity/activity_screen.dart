@@ -31,7 +31,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   Widget build(BuildContext context) {
     final activity = ref.watch(activityProvider(widget.activityId));
     final samples = ref.watch(samplesProvider(widget.activityId));
-    final series = ref.watch(hrSeriesProvider(widget.activityId)).valueOrNull ?? const [];
+    final series =
+        ref.watch(hrSeriesProvider(widget.activityId)).valueOrNull ?? const [];
     final marker = ref.watch(workoutMarkerProvider(widget.activityId));
     final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
     final zoneSetup = zoneSetupFor(
