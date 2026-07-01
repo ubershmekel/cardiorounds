@@ -87,10 +87,7 @@ class _StartupErrorScaffoldState extends State<_StartupErrorScaffold> {
   @override
   void initState() {
     super.initState();
-    appLog(
-      'Startup',
-      'Failed to start: ${widget.error}\n${widget.stackTrace}',
-    );
+    appLog('Startup', 'Failed to start: ${widget.error}\n${widget.stackTrace}');
   }
 
   @override
@@ -108,11 +105,7 @@ class _StartupErrorScaffoldState extends State<_StartupErrorScaffold> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 48,
-                    color: scheme.error,
-                  ),
+                  Icon(Icons.error_outline, size: 48, color: scheme.error),
                   const SizedBox(height: 20),
                   Text(
                     "Couldn't start Cardio Rounds",

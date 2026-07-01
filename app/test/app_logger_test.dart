@@ -61,31 +61,34 @@ void main() {
       expect(await file.length(), lessThanOrEqualTo(220));
     });
 
-    test('strips a NUL-byte gap left by a killed rewrite when trimming', () async {
-      final file = logFile('gap.log');
-      // Simulate the crash artifact: a big run of NUL bytes (from an unflushed
-      // rewrite that lost its data blocks) followed by real entries.
-      final gap = '\x00' * 4000;
-      await file.writeAsString(
-        '$gap\nreal 0 ${'x' * 20}\nreal 1 ${'x' * 20}\n',
-      );
-      final logger = AppLogger.forTesting(
-        config: const AppLoggerConfig(
-          maxFileBytes: 120,
-          retainedFileLinesAfterTrim: 4,
-        ),
-        fileResolver: () async => file,
-        printer: (_) {},
-      );
+    test(
+      'strips a NUL-byte gap left by a killed rewrite when trimming',
+      () async {
+        final file = logFile('gap.log');
+        // Simulate the crash artifact: a big run of NUL bytes (from an unflushed
+        // rewrite that lost its data blocks) followed by real entries.
+        final gap = '\x00' * 4000;
+        await file.writeAsString(
+          '$gap\nreal 0 ${'x' * 20}\nreal 1 ${'x' * 20}\n',
+        );
+        final logger = AppLogger.forTesting(
+          config: const AppLoggerConfig(
+            maxFileBytes: 120,
+            retainedFileLinesAfterTrim: 4,
+          ),
+          fileResolver: () async => file,
+          printer: (_) {},
+        );
 
-      await logger.resolveLogFile();
+        await logger.resolveLogFile();
 
-      final contents = await file.readAsString();
-      expect(contents, isNot(contains('\x00')));
-      final lines = await file.readAsLines();
-      expect(lines.last, contains('real 1 '));
-      expect(await file.length(), lessThanOrEqualTo(120));
-    });
+        final contents = await file.readAsString();
+        expect(contents, isNot(contains('\x00')));
+        final lines = await file.readAsLines();
+        expect(lines.last, contains('real 1 '));
+        expect(await file.length(), lessThanOrEqualTo(120));
+      },
+    );
 
     test('trims an existing oversized file when resolving it', () async {
       final file = logFile('existing.log');
