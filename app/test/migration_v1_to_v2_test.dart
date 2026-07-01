@@ -74,6 +74,12 @@ AppDatabase _openMigratedFromV1() {
     '(10, 1000, 100), (10, 2000, 110), (20, 500, 80), '
     '(999, 1234, 60)',
   );
+  // A live marker plus an orphan pointing at a deleted activity — the kind a v1
+  // delete could leave behind when foreign_keys was OFF.
+  raw.execute(
+    "INSERT INTO markers (id, activity_id, t_ms, duration_ms, kind) VALUES "
+    "(1, 10, 1000, 500, 'workout'), (66, 999, 1234, NULL, 'workout')",
+  );
   raw.execute('PRAGMA user_version = 1');
   return AppDatabase.forTesting(NativeDatabase.opened(raw));
 }
@@ -168,6 +174,13 @@ void main() {
         expect(cols.any((c) => c.data['name'] == 'device_id'), isFalse);
       },
     );
+
+    test('drops orphaned markers but keeps live ones', () async {
+      final ids = await db
+          .customSelect('SELECT id FROM markers ORDER BY id')
+          .get();
+      expect(ids.map((r) => r.data['id']), [1]);
+    });
 
     test('passes foreign_key_check after migrating', () async {
       final violations = await db

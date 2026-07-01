@@ -115,6 +115,27 @@ class AppDatabase extends _$AppDatabase {
                   'v2: dropped $orphanCount orphaned samples with no activity',
                 );
               }
+              // Drop markers whose activity is gone. v1 could leave these when a
+              // delete ran with foreign_keys OFF (so the cascade never fired);
+              // v2 turns enforcement on, so a dangling marker would fail the
+              // foreign_key_check below and roll back the whole migration.
+              final orphanMarkers = await customSelect(
+                'SELECT COUNT(*) AS c FROM markers m '
+                'WHERE NOT EXISTS '
+                '(SELECT 1 FROM activities a WHERE a.id = m.activity_id)',
+              ).getSingle();
+              final orphanMarkerCount = orphanMarkers.data['c'] as int;
+              if (orphanMarkerCount > 0) {
+                await customStatement(
+                  'DELETE FROM markers WHERE NOT EXISTS '
+                  '(SELECT 1 FROM activities a WHERE a.id = markers.activity_id)',
+                );
+                appLog(
+                  'Migration',
+                  'v2: dropped $orphanMarkerCount orphaned markers with no '
+                      'activity',
+                );
+              }
               await m.deleteTable('samples');
               // Drop activities.device_id (it moved to sample_sets); rebuilds
               // the table from the current schema.
