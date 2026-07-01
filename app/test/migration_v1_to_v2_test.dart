@@ -78,6 +78,31 @@ AppDatabase _openMigratedFromV1() {
   return AppDatabase.forTesting(NativeDatabase.opened(raw));
 }
 
+/// Matches partially-upgraded real databases where the app still needs the v2
+/// migration, but activities.device_id is already gone.
+AppDatabase _openMigratedFromV1WithoutActivityDeviceId() {
+  final raw = sqlite3.openInMemory();
+  raw.execute(
+    _v1Schema.replaceFirst(
+      '  device_id INTEGER REFERENCES devices (id) ON DELETE SET NULL,\n',
+      '',
+    ),
+  );
+  raw.execute(
+    "INSERT INTO athletes (id, name, created_at_ms) VALUES (1, '', 0)",
+  );
+  raw.execute(
+    'INSERT INTO activities '
+    '(id, athlete_id, started_at_ms, duration_ms, created_at_ms, updated_at_ms) '
+    'VALUES (10, 1, 100, 5000, 100, 100)',
+  );
+  raw.execute(
+    'INSERT INTO samples (activity_id, t_ms, hr) VALUES (10, 1000, 100)',
+  );
+  raw.execute('PRAGMA user_version = 1');
+  return AppDatabase.forTesting(NativeDatabase.opened(raw));
+}
+
 void main() {
   group('migration v1 -> v2', () {
     late AppDatabase db;
@@ -150,5 +175,27 @@ void main() {
           .get();
       expect(violations, isEmpty);
     });
+  });
+
+  test('migrates when activities.device_id is already missing', () async {
+    final db = _openMigratedFromV1WithoutActivityDeviceId();
+    addTearDown(db.close);
+
+    await db.customSelect('SELECT 1').get();
+
+    final sets = await db
+        .customSelect(
+          'SELECT id, activity_id, device_id, kind FROM sample_sets',
+        )
+        .get();
+    expect(sets.map((r) => r.data), [
+      {'id': 10, 'activity_id': 10, 'device_id': null, 'kind': 'hr'},
+    ]);
+
+    final samples = await db.watchSamples(10).first;
+    expect(samples.map((s) => (s.tMs, s.hr)), [(1000, 100)]);
+
+    final violations = await db.customSelect('PRAGMA foreign_key_check').get();
+    expect(violations, isEmpty);
   });
 }

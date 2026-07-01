@@ -140,11 +140,61 @@ class _StartupErrorScaffoldState extends State<_StartupErrorScaffold> {
                     icon: const Icon(Icons.refresh),
                     label: const Text('Try again'),
                   ),
+                  const SizedBox(height: 16),
+                  _ErrorDetails(
+                    error: widget.error,
+                    stackTrace: widget.stackTrace,
+                  ),
                 ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Collapsed-by-default technical error text. Hidden behind a disclosure so the
+/// screen stays calm for users, but the real error is one tap away (and
+/// selectable) without exporting the whole log.
+class _ErrorDetails extends StatelessWidget {
+  const _ErrorDetails({required this.error, required this.stackTrace});
+
+  final Object error;
+  final StackTrace stackTrace;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Theme(
+      // ExpansionTile draws its own dividers; drop them for a cleaner look.
+      data: theme.copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(top: 8),
+        title: Text('Details', style: theme.textTheme.labelLarge),
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            constraints: const BoxConstraints(maxHeight: 240),
+            child: SingleChildScrollView(
+              child: SelectableText(
+                '$error\n\n$stackTrace',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

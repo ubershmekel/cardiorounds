@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 const String kAppLogFileName = 'cardio_rounds.log';
 const int kAppLogMemoryBufferLines = 2000;
-const int kAppLogMaxFileBytes = 2 * 1024 * 1024;
+const int kAppLogMaxFileBytes = 1 * 1024 * 1024;
 const int kAppLogRetainedFileLinesAfterTrim = 5000;
 
 typedef AppLogFileResolver = Future<File> Function();
@@ -105,7 +105,15 @@ class AppLogger {
   Future<void> _trimIfNeeded(File file) async {
     if (!await file.exists()) return;
     if (await file.length() <= _config.maxFileBytes) return;
-    final lines = await file.readAsLines();
+    // Strip NUL bytes and drop the blank lines they leave behind: a rewrite that
+    // was killed before its data flushed can leave a run of NUL bytes (the file
+    // keeps its new length, but the blocks read back as zeros), which shows up as
+    // a big empty gap in the log. Real entries are never blank, so this is safe.
+    final lines = [
+      for (final line in await file.readAsLines())
+        if (line.replaceAll('\x00', '').trim().isNotEmpty)
+          line.replaceAll('\x00', ''),
+    ];
     var keep = lines.length > _config.retainedFileLinesAfterTrim
         ? lines.sublist(lines.length - _config.retainedFileLinesAfterTrim)
         : lines;
@@ -115,7 +123,12 @@ class AppLogger {
       keep = keep.sublist(1);
     }
 
-    await file.writeAsString(keep.isEmpty ? '' : '${keep.join('\n')}\n');
+    // flush so the truncated rewrite is durable before we return; without it a
+    // kill here is exactly what produces the NUL-gap this method also cleans up.
+    await file.writeAsString(
+      keep.isEmpty ? '' : '${keep.join('\n')}\n',
+      flush: true,
+    );
   }
 
   Future<File?> resolveLogFile() async {

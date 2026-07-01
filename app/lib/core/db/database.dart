@@ -77,9 +77,23 @@ class AppDatabase extends _$AppDatabase {
               // set id so the sample copy is a trivial 1:1 map. This is a
               // one-time convenience, NOT an invariant — new sets get
               // autoincremented ids.
+              final activityColumns = await customSelect(
+                'PRAGMA table_info(activities)',
+              ).get();
+              final hasActivityDeviceId = activityColumns.any(
+                (c) => c.data['name'] == 'device_id',
+              );
+              if (!hasActivityDeviceId) {
+                appLog(
+                  'Migration',
+                  'v2: activities.device_id missing; migrating HR sets '
+                      'without device associations',
+                );
+              }
               await customStatement(
                 "INSERT INTO sample_sets (id, activity_id, device_id, kind) "
-                "SELECT id, id, device_id, 'hr' FROM activities",
+                "SELECT id, id, ${hasActivityDeviceId ? 'device_id' : 'NULL'}, "
+                "'hr' FROM activities",
               );
               await customStatement(
                 'INSERT INTO hr_samples (set_id, t_ms, hr) '

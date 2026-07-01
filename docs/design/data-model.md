@@ -190,6 +190,11 @@ exists. v1 did not consistently enable SQLite foreign key enforcement, so real
 databases can contain those rows after an activity delete; v2 cannot attach them
 to a valid `sample_sets` row.
 
+Some real databases can also report v1 while already missing
+`activities.device_id`. In that shape, migrate the HR set with `device_id = NULL`
+instead of failing; the samples remain attached to their activity, but the old
+device association is no longer recoverable from the database.
+
 `samples` is rebuilt, not renamed — its primary key and foreign key both change
 from `activity_id` to `set_id`, which `ALTER TABLE ... RENAME` cannot do. Drop
 `activities.device_id` in the same migration (a table rebuild). Run the schema
