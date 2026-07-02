@@ -107,7 +107,7 @@ class BluetoothHeartRateSource implements HeartRateSource {
       await _device.connect(
         timeout: timeout,
         autoConnect: false,
-        license: License.free,
+        license: License.nonprofit,
       );
     } else {
       appLog('BT', '$prefix$_displayName already connected');
