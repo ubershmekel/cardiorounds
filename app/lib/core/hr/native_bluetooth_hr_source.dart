@@ -70,7 +70,9 @@ class NativeBluetoothHeartRateSource implements HeartRateSource {
     if (_draining) return;
     _draining = true;
     try {
-      final result = await _channel.invokeMapMethod<String, dynamic>('drain');
+      final result = await _channel.invokeMapMethod<String, dynamic>('drain', {
+        'remoteId': _remoteId,
+      });
       if (result == null || _samples.isClosed) return;
       _emitEvents(result['events'] as List<dynamic>? ?? const []);
       _emitSamples(result['samples'] as List<dynamic>? ?? const []);
@@ -124,7 +126,7 @@ class NativeBluetoothHeartRateSource implements HeartRateSource {
     // Final drain so samples captured between the last tick and stop aren't lost.
     await _drain();
     try {
-      await _channel.invokeMethod<void>('stop');
+      await _channel.invokeMethod<void>('stop', {'remoteId': _remoteId});
     } catch (e) {
       appLog('BT', 'Native stop error for $_displayName: $e');
     }

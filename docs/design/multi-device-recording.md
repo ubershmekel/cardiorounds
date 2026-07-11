@@ -71,6 +71,39 @@ score** (extra beats) are single-athlete analysis defaults. They are still shown
 on the multi-device review — computed from the **primary** device and labelled
 with its name — rather than hidden.
 
+## Native central (iOS): one central, many peripherals
+
+On iOS the recording connection is owned by the native `HrBackgroundCentral`
+(Swift) so samples keep buffering while iOS suspends the app. There is exactly
+**one** `CBCentralManager` — the OS only gives you one — but it must drive **N
+peripherals independently**. Everything downstream of the central is keyed by the
+device's `CBPeripheral.identifier` (its UUID):
+
+- **Buffers are per device.** Each connected strap has its own sample and event
+  buffer. `didUpdateValueFor` routes the parsed BPM into the buffer for
+  `peripheral.identifier` — samples from two straps are **never** merged into one
+  stream. Merging is the bug this section exists to prevent: without per-device
+  keying, two `NativeBluetoothHeartRateSource` drainers race over one shared
+  buffer and each chart shows an interleave of both straps.
+- **`start` / `drain` / `stop` carry a `remoteId`** and touch only that device's
+  slot. Starting a second device does not clear the first's buffer; stopping one
+  device cancels only that peripheral's connection and stops its auto-reconnect,
+  leaving the others recording.
+- **Reconnect is per peripheral.** `didDisconnectPeripheral` re-connects only if
+  that specific id is still a wanted target; a device removed via `stop` does not
+  auto-reconnect.
+- **The hardware scan is shared.** The single scan feeds both the discovery
+  picker and the recording connect-fallback; it stops only when no device still
+  needs it (no discovery scan running and every recording target is connected or
+  connecting).
+- **Restore adopts all peripherals.** A BLE relaunch (`willRestoreState`) re-adopts
+  every peripheral iOS hands back, not just the first.
+
+This keying is also what the upcoming **multiple-athletes** work builds on: a set
+already carries its `device_id`, and per-device streams map cleanly onto a future
+per-device `athlete_id`. Nothing here aggregates across devices, so adding
+athletes is a labelling/attribution change, not a stream-routing one.
+
 ## Crash recovery (all devices)
 
 The crash sentinel records **all** devices in the session

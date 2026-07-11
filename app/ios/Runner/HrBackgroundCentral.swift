@@ -2,8 +2,8 @@ import CoreBluetooth
 import Flutter
 import Foundation
 
-/// A CoreBluetooth central that owns the recording-time connection to a
-/// heart-rate strap and buffers samples natively.
+/// A CoreBluetooth central that owns the recording-time connections to one or
+/// more heart-rate straps and buffers their samples natively, per device.
 ///
 /// Why this exists: when iOS suspends the app, the Dart isolate is frozen and
 /// can't receive BLE notifications over the platform channel — that's the data
@@ -16,10 +16,17 @@ import Foundation
 /// engine to run the Dart handler is not — that's the whole reason this lives in
 /// Swift and not in Dart.
 ///
-/// The buffer is in-memory, so it survives *suspension* (the process is frozen
-/// but resident) but not *termination*. The restore identifier lets iOS relaunch
-/// us into the central after a BLE event if the app was killed; a future step
-/// could also append to a flat file for termination durability.
+/// One central, many peripherals: iOS only grants one `CBCentralManager`, but a
+/// session can record several straps at once. Everything downstream of the
+/// central is therefore keyed by `CBPeripheral.identifier` (the device UUID):
+/// separate buffers, separate reconnect, separate start/stop. Samples from two
+/// straps are never merged into one stream — see
+/// `docs/design/multi-device-recording.md`.
+///
+/// The buffers are in-memory, so they survive *suspension* (the process is
+/// frozen but resident) but not *termination*. The restore identifier lets iOS
+/// relaunch us into the central after a BLE event if the app was killed; a
+/// future step could also append to a flat file for termination durability.
 final class HrBackgroundCentral: NSObject {
   static let shared = HrBackgroundCentral()
 
@@ -28,8 +35,6 @@ final class HrBackgroundCentral: NSObject {
   private static let hrService = CBUUID(string: "180D")
   private static let hrMeasurement = CBUUID(string: "2A37")
 
-  // Standard HR notify characteristic is live-only, so a sample older than this
-  // is not worth waiting on; used only to throttle reconnect log spam.
   private let queue = DispatchQueue(label: "cardiorounds.hr.central")
 
   private var central: CBCentralManager?
@@ -42,21 +47,25 @@ final class HrBackgroundCentral: NSObject {
   // Guards the buffers, which are written from the CoreBluetooth `queue` and
   // read from the platform-channel thread during `drain` / `scanDrain`.
   private let lock = NSLock()
-  private var sampleBuffer: [[String: Any]] = []
-  private var eventBuffer: [[String: Any]] = []
+  // Per-device sample/event buffers, keyed by peripheral UUID. Two straps never
+  // share a buffer, so their samples can't cross-feed into each other's stream.
+  private var sampleBuffers: [UUID: [[String: Any]]] = [:]
+  private var eventBuffers: [UUID: [[String: Any]]] = [:]
   // Keyed by UUID so repeated discoveries just update RSSI; never cleared until
   // scanStop so the Dart side always sees the full accumulated list.
   private var scanDevices: [UUID: [String: Any]] = [:]
 
-  private var peripheral: CBPeripheral?
-  private var targetId: UUID?
-  private var desiredName: String?
-  // True between `start` and `stop`; drives auto-reconnect on disconnect.
-  private var recording = false
+  // Peripherals we've adopted (connecting, connected, or reconnecting), keyed by
+  // UUID. A device is in here from `connect` until its `stop`.
+  private var peripherals: [UUID: CBPeripheral] = [:]
+  // Devices the session wants recorded. Drives auto-reconnect and keeps the
+  // shared scan alive until every target is adopted. A device leaves on `stop`.
+  private var targets: Set<UUID> = []
   // True between `scanStart` and `scanStop`; fills scanDevices in didDiscover.
   private var discoveryScanning = false
-  // Deferred until the central reaches `.poweredOn`.
-  private var pendingStart: (() -> Void)?
+  // Actions deferred until the central reaches `.poweredOn`. A list (not a
+  // single closure) so concurrent starts/scans don't clobber each other.
+  private var pendingActions: [() -> Void] = []
 
   // Diagnostics: counts samples so we can emit a heartbeat to the log roughly
   // once a minute from inside the BLE callback (a Timer wouldn't fire while
@@ -108,9 +117,17 @@ final class HrBackgroundCentral: NSObject {
       }
       start(uuid: uuid, name: args?["name"] as? String, result: result)
     case "drain":
-      result(drain())
+      guard let remoteId = args?["remoteId"] as? String, let uuid = UUID(uuidString: remoteId) else {
+        result(FlutterError(code: "bad_args", message: "Missing remoteId", details: nil))
+        return
+      }
+      result(drain(for: uuid))
     case "stop":
-      stop()
+      guard let remoteId = args?["remoteId"] as? String, let uuid = UUID(uuidString: remoteId) else {
+        result(FlutterError(code: "bad_args", message: "Missing remoteId", details: nil))
+        return
+      }
+      stop(uuid: uuid)
       result(nil)
     case "scanStart":
       scanStart(result: result)
@@ -129,16 +146,21 @@ final class HrBackgroundCentral: NSObject {
   private func start(uuid: UUID, name: String?, result: @escaping FlutterResult) {
     queue.async {
       self.ensureCentral()
-      self.targetId = uuid
-      self.desiredName = name
-      self.recording = true
-      self.samplesTotal = 0
-      self.samplesSinceHeartbeat = 0
-      self.clearBuffers()
+      // Reset the diagnostic counters only when starting the first device of a
+      // session; a second `start` must not zero the running total.
+      if self.targets.isEmpty {
+        self.samplesTotal = 0
+        self.samplesSinceHeartbeat = 0
+      }
+      self.targets.insert(uuid)
+      self.clearBuffers(for: uuid)
       NativeAppLog.log("BTNative", "start for \(name ?? uuid.uuidString)")
 
       let connect = { [weak self] in
         guard let self, let central = self.central else { return }
+        // Re-check intent: a deferred start (Bluetooth was off) may run after the
+        // device was already stopped, in which case it's no longer a target.
+        guard self.targets.contains(uuid) else { return }
         if let known = central.retrievePeripherals(withIdentifiers: [uuid]).first {
           self.connect(known)
         } else {
@@ -151,7 +173,7 @@ final class HrBackgroundCentral: NSObject {
         connect()
       } else {
         // Bluetooth not ready yet; run once `centralManagerDidUpdateState` fires.
-        self.pendingStart = connect
+        self.pendingActions.append(connect)
       }
       // Resolve immediately. Samples arrive asynchronously via `drain`; the Dart
       // side shows "Connecting…" until the first one lands, mirroring the old
@@ -161,23 +183,23 @@ final class HrBackgroundCentral: NSObject {
   }
 
   private func connect(_ peripheral: CBPeripheral) {
-    self.peripheral = peripheral
+    peripherals[peripheral.identifier] = peripheral
     peripheral.delegate = self
-    central?.stopScan()
     central?.connect(peripheral, options: nil)
+    maybeStopScan()
   }
 
-  private func stop() {
+  private func stop(uuid: UUID) {
     queue.async {
-      NativeAppLog.log("BTNative", "stop after \(self.samplesTotal) samples total")
-      self.recording = false
-      self.pendingStart = nil
-      self.central?.stopScan()
-      if let peripheral = self.peripheral {
+      NativeAppLog.log("BTNative", "stop \(uuid.uuidString) after \(self.samplesTotal) samples total")
+      self.targets.remove(uuid)
+      if let peripheral = self.peripherals[uuid] {
         self.central?.cancelPeripheralConnection(peripheral)
+        self.peripherals[uuid] = nil
       }
-      self.peripheral = nil
-      self.targetId = nil
+      // Leave this device's buffers: the Dart side does a final `drain` before
+      // `stop`, so they're already empty; clearing here would be a no-op race.
+      self.maybeStopScan()
     }
   }
 
@@ -195,18 +217,17 @@ final class HrBackgroundCentral: NSObject {
       self.scanDevices.removeAll()
       self.lock.unlock()
       self.discoveryScanning = true
-      let startScan = {
+      let startScan = { [weak self] in
+        guard let self else { return }
+        // Re-check intent: a deferred scan (Bluetooth was off) may run after
+        // scanStop cleared discoveryScanning; don't start a stray scan then.
+        guard self.discoveryScanning else { return }
         central.scanForPeripherals(withServices: [Self.hrService])
       }
       if central.state == .poweredOn {
         startScan()
       } else {
-        // Chain onto any pending start closure; if there isn't one, set our own.
-        let existing = self.pendingStart
-        self.pendingStart = {
-          existing?()
-          startScan()
-        }
+        self.pendingActions.append(startScan)
       }
       result(nil)
     }
@@ -216,14 +237,23 @@ final class HrBackgroundCentral: NSObject {
     queue.async {
       NativeAppLog.log("BTNative", "scanStop")
       self.discoveryScanning = false
-      // Only stop the hardware scan if we're not in the middle of a recording
-      // connect-scan (targetId set means we're hunting for a specific device).
-      if self.targetId == nil {
-        self.central?.stopScan()
-      }
+      self.maybeStopScan()
       self.lock.lock()
       self.scanDevices.removeAll()
       self.lock.unlock()
+    }
+  }
+
+  /// Stops the shared hardware scan only when nothing still needs it: no
+  /// discovery scan is running and every recording target has been adopted
+  /// (connecting or connected). The connect-fallback scan and the discovery
+  /// scan share one `scanForPeripherals`, so this is the single owner of when it
+  /// ends. Must be called on `queue`.
+  private func maybeStopScan() {
+    guard !discoveryScanning else { return }
+    let allTargetsAdopted = targets.isSubset(of: Set(peripherals.keys))
+    if allTargetsAdopted {
+      central?.stopScan()
     }
   }
 
@@ -250,11 +280,11 @@ final class HrBackgroundCentral: NSObject {
 
   // MARK: - Buffer
 
-  private func appendSample(bpm: Int?) {
+  private func appendSample(bpm: Int?, for id: UUID) {
     let entry: [String: Any] = ["tMs": nowMs(), "bpm": bpm ?? NSNull()]
     lock.lock()
-    sampleBuffer.append(entry)
-    let buffered = sampleBuffer.count
+    sampleBuffers[id, default: []].append(entry)
+    let buffered = sampleBuffers[id]?.count ?? 0
     lock.unlock()
 
     samplesTotal += 1
@@ -272,28 +302,29 @@ final class HrBackgroundCentral: NSObject {
     }
   }
 
-  private func appendEvent(_ kind: String, _ message: String?) {
+  private func appendEvent(_ kind: String, _ message: String?, for id: UUID) {
     let entry: [String: Any] = ["tMs": nowMs(), "kind": kind, "message": message ?? NSNull()]
     lock.lock()
-    eventBuffer.append(entry)
+    eventBuffers[id, default: []].append(entry)
     lock.unlock()
   }
 
-  private func clearBuffers() {
+  private func clearBuffers(for id: UUID) {
     lock.lock()
-    sampleBuffer.removeAll()
-    eventBuffer.removeAll()
+    sampleBuffers[id] = []
+    eventBuffers[id] = []
     lock.unlock()
   }
 
-  /// Returns everything accumulated since the previous drain and clears the
-  /// buffers. After a suspension this returns the whole backlog in one call.
-  private func drain() -> [String: Any] {
+  /// Returns everything accumulated for one device since the previous drain and
+  /// clears its buffers. After a suspension this returns the whole backlog in one
+  /// call. Only this device's samples are returned — never another strap's.
+  private func drain(for id: UUID) -> [String: Any] {
     lock.lock()
-    let samples = sampleBuffer
-    let events = eventBuffer
-    sampleBuffer.removeAll()
-    eventBuffer.removeAll()
+    let samples = sampleBuffers[id] ?? []
+    let events = eventBuffers[id] ?? []
+    sampleBuffers[id] = []
+    eventBuffers[id] = []
     lock.unlock()
     return ["samples": samples, "events": events]
   }
@@ -323,9 +354,10 @@ final class HrBackgroundCentral: NSObject {
 extension HrBackgroundCentral: CBCentralManagerDelegate {
   func centralManagerDidUpdateState(_ central: CBCentralManager) {
     guard central.state == .poweredOn else { return }
-    if let pending = pendingStart {
-      pendingStart = nil
-      pending()
+    let pending = pendingActions
+    pendingActions.removeAll()
+    for action in pending {
+      action()
     }
   }
 
@@ -338,8 +370,10 @@ extension HrBackgroundCentral: CBCentralManagerDelegate {
     if discoveryScanning {
       appendScannedDevice(peripheral, rssi: RSSI.intValue)
     }
-    // Connect-scan fallback: we're hunting for a specific device by UUID.
-    if let targetId, peripheral.identifier == targetId {
+    // Connect-fallback: we're hunting for specific target devices by UUID. Only
+    // adopt one we haven't already (another target may still need the scan).
+    let id = peripheral.identifier
+    if targets.contains(id), peripherals[id] == nil {
       connect(peripheral)
     }
   }
@@ -353,14 +387,16 @@ extension HrBackgroundCentral: CBCentralManagerDelegate {
     didDisconnectPeripheral peripheral: CBPeripheral,
     error: Error?
   ) {
-    appendSample(bpm: nil) // signal-loss marker for the Dart pipeline
-    appendEvent("disconnected", error?.localizedDescription ?? "disconnected")
-    NativeAppLog.log("BTNative", "disconnected: \(error?.localizedDescription ?? "no error")")
-    // Keep trying as long as the recording is live. iOS completes this connect
-    // request whenever the strap is back in range — including from a background
-    // wake — which is exactly the durability we want.
-    if recording {
-      appendEvent("reconnecting", nil)
+    let id = peripheral.identifier
+    appendSample(bpm: nil, for: id) // signal-loss marker for the Dart pipeline
+    appendEvent("disconnected", error?.localizedDescription ?? "disconnected", for: id)
+    NativeAppLog.log("BTNative", "disconnected \(id.uuidString): \(error?.localizedDescription ?? "no error")")
+    // Keep trying as long as this device is still a wanted target. iOS completes
+    // the connect request whenever the strap is back in range — including from a
+    // background wake — which is exactly the durability we want. A device removed
+    // via `stop` is no longer a target, so it won't auto-reconnect.
+    if targets.contains(id) {
+      appendEvent("reconnecting", nil, for: id)
       central.connect(peripheral, options: nil)
     }
   }
@@ -370,26 +406,30 @@ extension HrBackgroundCentral: CBCentralManagerDelegate {
     didFailToConnect peripheral: CBPeripheral,
     error: Error?
   ) {
-    appendEvent("disconnected", error?.localizedDescription ?? "connect failed")
-    if recording {
+    let id = peripheral.identifier
+    appendEvent("disconnected", error?.localizedDescription ?? "connect failed", for: id)
+    if targets.contains(id) {
       central.connect(peripheral, options: nil)
     }
   }
 
   /// iOS relaunched us (e.g. after termination) due to a BLE event and is
-  /// handing back the peripheral it had. Re-adopt it so notifications resume.
+  /// handing back the peripherals it had. Re-adopt every one so notifications
+  /// resume for the whole session, not just one strap.
   func centralManager(
     _ central: CBCentralManager,
     willRestoreState dict: [String: Any]
   ) {
-    let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral]
-    guard let restored = peripherals?.first else { return }
-    recording = true
-    targetId = restored.identifier
-    peripheral = restored
-    restored.delegate = self
-    appendEvent("reconnecting", "restored")
-    NativeAppLog.log("BTNative", "willRestoreState: relaunched into central by iOS")
+    let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
+    guard !peripherals.isEmpty else { return }
+    for restored in peripherals {
+      let id = restored.identifier
+      targets.insert(id)
+      self.peripherals[id] = restored
+      restored.delegate = self
+      appendEvent("reconnecting", "restored", for: id)
+    }
+    NativeAppLog.log("BTNative", "willRestoreState: relaunched into central with \(peripherals.count) peripheral(s)")
   }
 }
 
@@ -398,7 +438,7 @@ extension HrBackgroundCentral: CBCentralManagerDelegate {
 extension HrBackgroundCentral: CBPeripheralDelegate {
   func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
     guard let service = peripheral.services?.first(where: { $0.uuid == Self.hrService }) else {
-      appendEvent("disconnected", "no heart-rate service")
+      appendEvent("disconnected", "no heart-rate service", for: peripheral.identifier)
       return
     }
     peripheral.discoverCharacteristics([Self.hrMeasurement], for: service)
@@ -410,12 +450,12 @@ extension HrBackgroundCentral: CBPeripheralDelegate {
     error: Error?
   ) {
     guard let char = service.characteristics?.first(where: { $0.uuid == Self.hrMeasurement }) else {
-      appendEvent("disconnected", "no heart-rate characteristic")
+      appendEvent("disconnected", "no heart-rate characteristic", for: peripheral.identifier)
       return
     }
     peripheral.setNotifyValue(true, for: char)
-    appendEvent("connected", nil)
-    NativeAppLog.log("BTNative", "notifications enabled - ready")
+    appendEvent("connected", nil, for: peripheral.identifier)
+    NativeAppLog.log("BTNative", "notifications enabled for \(peripheral.identifier.uuidString) - ready")
   }
 
   func peripheral(
@@ -424,6 +464,8 @@ extension HrBackgroundCentral: CBPeripheralDelegate {
     error: Error?
   ) {
     guard characteristic.uuid == Self.hrMeasurement, let data = characteristic.value else { return }
-    appendSample(bpm: parseHeartRate(data))
+    // Route strictly by which peripheral notified: this is what keeps two
+    // straps' samples in separate buffers instead of merged into one stream.
+    appendSample(bpm: parseHeartRate(data), for: peripheral.identifier)
   }
 }
