@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/db/providers.dart';
 import '../features/activity/activity_screen.dart';
+import '../features/athletes/athletes_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/recording/confirm_record_screen.dart';
 import '../features/recording/recording_screen.dart';
@@ -70,6 +71,12 @@ GoRouter buildRouter(Ref ref) {
               GoRoute(
                 path: '/settings',
                 builder: (_, _) => const SettingsScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'athletes',
+                    builder: (_, _) => const AthletesScreen(),
+                  ),
+                ],
               ),
             ],
           ),

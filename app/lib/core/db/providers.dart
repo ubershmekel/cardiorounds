@@ -58,6 +58,22 @@ final defaultAthleteProvider = StreamProvider<Athlete>((ref) {
   return db.watchDefaultAthlete();
 });
 
+/// Every athlete, oldest first (the lowest-id row is the default). Drives the
+/// athlete-management pager and the >1-athlete attribution pickers.
+final athletesProvider = StreamProvider<List<Athlete>>((ref) {
+  final db = ref.watch(databaseProvider);
+  return db.watchAthletes();
+});
+
+/// The blast radius shown in the delete-warning dialog: workouts deleted
+/// entirely plus the athlete's total stream count (to distinguish a
+/// never-recorded athlete from one with only shared-session streams).
+/// autoDispose so it refetches each open, reflecting any re-attribution since.
+final athleteDeletionImpactProvider = FutureProvider.autoDispose
+    .family<({int soloWorkouts, int streams}), int>((ref, athleteId) {
+      return ref.watch(databaseProvider).athleteDeletionImpact(athleteId);
+    });
+
 final activitiesProvider = StreamProvider<List<Activity>>((ref) {
   final db = ref.watch(databaseProvider);
   return db.watchActivities();

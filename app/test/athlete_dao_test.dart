@@ -108,6 +108,27 @@ void main() {
         expect(await db.countWorkoutsOnlyFromAthlete(b.id), 0);
       });
 
+      test('deletion impact separates solo workouts from shared streams', () async {
+        // Alice: one solo workout, plus a stream in each of the shared and
+        // unattributed sessions -> 1 solo workout, 3 streams total.
+        expect(
+          await db.athleteDeletionImpact(a.id),
+          (soloWorkouts: 1, streams: 3),
+        );
+        // Bob only ever wears the second strap of the shared session -> no solo
+        // workouts, but one stream is still removed on delete.
+        expect(
+          await db.athleteDeletionImpact(b.id),
+          (soloWorkouts: 0, streams: 1),
+        );
+        // A never-recorded athlete loses nothing.
+        final c = await db.insertAthlete(name: 'Cara');
+        expect(
+          await db.athleteDeletionImpact(c.id),
+          (soloWorkouts: 0, streams: 0),
+        );
+      });
+
       test('deletes solo workouts but keeps shared sessions', () async {
         await db.deleteAthlete(a.id);
 
@@ -140,6 +161,23 @@ void main() {
         expect(() => db.deleteAthlete(b.id), throwsA(isA<StateError>()));
         expect(await db.watchAthletes().first, hasLength(1));
       });
+    });
+
+    test('setStreamAthlete re-attributes a single stream, or clears it', () async {
+      final a = await db.ensureDefaultAthlete();
+      final b = await db.insertAthlete(name: 'Bob');
+      final started = await db.startActivityWithDevices(
+        athleteId: a.id,
+        startedAtMs: 0,
+        deviceIds: [null],
+      );
+      final setId = started.hrSetIds[0];
+
+      await db.setStreamAthlete(setId: setId, athleteId: b.id);
+      expect((await db.athleteForActivity(started.activityId))?.id, b.id);
+
+      await db.setStreamAthlete(setId: setId, athleteId: null);
+      expect(await db.athleteForActivity(started.activityId), isNull);
     });
 
     group('athleteForActivity (derived owner = primary set)', () {

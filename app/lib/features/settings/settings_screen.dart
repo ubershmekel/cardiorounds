@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/build_info.dart';
@@ -12,6 +12,7 @@ import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/support_logs.dart';
+import '../athletes/athlete_profile_fields.dart';
 
 final Uri _sourceCodeUrl = Uri.parse(
   'https://github.com/ubershmekel/cardiorounds',
@@ -34,70 +35,14 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-class _SettingsForm extends ConsumerStatefulWidget {
+class _SettingsForm extends ConsumerWidget {
   const _SettingsForm({required this.athlete});
 
   final Athlete athlete;
 
   @override
-  ConsumerState<_SettingsForm> createState() => _SettingsFormState();
-}
-
-class _SettingsFormState extends ConsumerState<_SettingsForm> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _maxHrController;
-  late final TextEditingController _restingHrController;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.athlete.name);
-    _maxHrController = TextEditingController(
-      text: widget.athlete.maxHeartrate?.toString() ?? '',
-    );
-    _restingHrController = TextEditingController(
-      text: widget.athlete.restingHeartrate?.toString() ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _maxHrController.dispose();
-    _restingHrController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    final db = ref.read(databaseProvider);
-    final maxText = _maxHrController.text.trim();
-    final restingText = _restingHrController.text.trim();
-    await db.updateAthlete(
-      id: widget.athlete.id,
-      name: _nameController.text.trim(),
-      maxHeartrate: maxText.isEmpty ? null : int.tryParse(maxText),
-      clearMax: maxText.isEmpty,
-      restingHeartrate: restingText.isEmpty ? null : int.tryParse(restingText),
-      clearResting: restingText.isEmpty,
-    );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Saved')));
-  }
-
-  bool get _isHRSwapped {
-    final max = int.tryParse(_maxHrController.text.trim());
-    final resting = int.tryParse(_restingHrController.text.trim());
-    return max != null && resting != null && max <= resting;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final maxHrUnset = widget.athlete.maxHeartrate == null;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final maxHrUnset = athlete.maxHeartrate == null;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -112,79 +57,9 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
             ),
           ),
         const SizedBox(height: 8),
-        TextField(
-          controller: _nameController,
-          decoration: const InputDecoration(
-            labelText: 'Name',
-            hintText: 'Your name (optional)',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _restingHrController,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            labelText: 'Resting heart rate (bpm)',
-            helperText: 'Leave empty if unknown',
-            border: OutlineInputBorder(),
-            suffixIcon: Tooltip(
-              message: 'Measure first thing in the morning, lying still.',
-              child: Icon(Icons.help_outline),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _maxHrController,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            labelText: 'MAX heart rate (bpm)',
-            helperText: 'Leave empty if unknown',
-            border: OutlineInputBorder(),
-            suffixIcon: Tooltip(
-              message:
-                  'Used for zone thresholds. Estimate: 220 minus your age; or measure with an increasingly hard interval session for accuracy.',
-              child: Icon(Icons.help_outline),
-            ),
-          ),
-        ),
-        if (_isHRSwapped) ...[
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(
-                Icons.warning_amber_rounded,
-                size: 18,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Max HR must be greater than resting HR - are they swapped?',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 24),
-        FilledButton(
-          onPressed: _saving || _isHRSwapped ? null : _save,
-          child: _saving
-              ? const SizedBox(
-                  height: 16,
-                  width: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Save'),
-        ),
+        // Auto-saves on blur; there is no Save button. Shared with the athlete
+        // pager (Advanced → Manage athletes).
+        AthleteProfileFields(athlete: athlete),
         const SizedBox(height: 32),
         ListTile(
           contentPadding: EdgeInsets.zero,
@@ -221,7 +96,13 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           OutlinedButton.icon(
             icon: const Icon(Icons.upload_outlined),
             label: const Text('Restore from database'),
-            onPressed: () => _restoreDatabase(context),
+            onPressed: () => _restoreDatabase(context, ref),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.people_alt_outlined),
+            label: const Text('Manage athletes'),
+            onPressed: () => context.push('/settings/athletes'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -258,7 +139,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
     );
   }
 
-  Future<void> _restoreDatabase(BuildContext context) async {
+  Future<void> _restoreDatabase(BuildContext context, WidgetRef ref) async {
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Restore not available on web')),

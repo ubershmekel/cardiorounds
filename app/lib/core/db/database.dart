@@ -343,6 +343,24 @@ class AppDatabase extends _$AppDatabase {
     return row.data['c'] as int;
   }
 
+  /// What deleting [athleteId] would remove: how many workouts vanish entirely
+  /// (every stream was theirs — [soloWorkouts]) and how many of their streams
+  /// exist in total across solo and shared sessions ([streams]). `streams == 0`
+  /// is a never-recorded athlete whose delete loses no data; `streams > 0 &&
+  /// soloWorkouts == 0` means only shared-session streams are removed (those
+  /// sessions survive with their other streams). Powers the delete-warning copy.
+  Future<({int soloWorkouts, int streams})> athleteDeletionImpact(
+    int athleteId,
+  ) async {
+    final soloWorkouts = await countWorkoutsOnlyFromAthlete(athleteId);
+    final row = await customSelect(
+      'SELECT COUNT(*) AS c FROM sample_sets WHERE athlete_id = ?1',
+      variables: [Variable.withInt(athleteId)],
+      readsFrom: {sampleSets},
+    ).getSingle();
+    return (soloWorkouts: soloWorkouts, streams: row.data['c'] as int);
+  }
+
   /// Deletes an athlete and every workout recorded solely from them. Their
   /// sample sets cascade away (with their hr_samples via the FK); any activity
   /// left with no remaining sets — a session only this athlete recorded — is
@@ -372,6 +390,18 @@ class AppDatabase extends _$AppDatabase {
         'Deleted athlete $athleteId: removed $removed solo workouts',
       );
     });
+  }
+
+  /// Re-attributes a single HR stream to an athlete, or clears it ([athleteId]
+  /// null = unattributed). The per-device athlete picker writes through here. See
+  /// docs/design/multi-athlete.md.
+  Future<void> setStreamAthlete({
+    required int setId,
+    required int? athleteId,
+  }) {
+    return (update(sampleSets)..where((s) => s.id.equals(setId))).write(
+      SampleSetsCompanion(athleteId: Value(athleteId)),
+    );
   }
 
   /// The athlete an activity is attributed to — its **primary** (lowest-id) HR
