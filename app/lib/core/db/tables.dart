@@ -21,7 +21,8 @@ class Devices extends Table {
 
 class Activities extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get athleteId => integer().named('athlete_id')();
+  // No athlete_id: attribution is per-stream on sample_sets.athlete_id. An
+  // activity's owner is derived from its primary HR set. See multi-athlete.md.
   IntColumn get startedAtMs => integer().named('started_at_ms')();
   IntColumn get durationMs => integer().named('duration_ms')();
   TextColumn get name => text().nullable()();
@@ -47,6 +48,12 @@ class SampleSets extends Table {
       .nullable()
       .named('device_id')
       .references(Devices, #id, onDelete: KeyAction.setNull)();
+  // Who wore this device; null = unattributed. Deleting an athlete cascades
+  // away their streams (and the DAO deletes any activity left with no sets).
+  IntColumn get athleteId => integer()
+      .nullable()
+      .named('athlete_id')
+      .references(Athletes, #id, onDelete: KeyAction.cascade)();
   TextColumn get kind => text()(); // 'hr' (future: 'location', 'spo2', ...)
 }
 

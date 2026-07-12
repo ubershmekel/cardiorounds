@@ -701,17 +701,6 @@ class $ActivitiesTable extends Activities
       'PRIMARY KEY AUTOINCREMENT',
     ),
   );
-  static const VerificationMeta _athleteIdMeta = const VerificationMeta(
-    'athleteId',
-  );
-  @override
-  late final GeneratedColumn<int> athleteId = GeneratedColumn<int>(
-    'athlete_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
   static const VerificationMeta _startedAtMsMeta = const VerificationMeta(
     'startedAtMs',
   );
@@ -821,7 +810,6 @@ class $ActivitiesTable extends Activities
   @override
   List<GeneratedColumn> get $columns => [
     id,
-    athleteId,
     startedAtMs,
     durationMs,
     name,
@@ -847,14 +835,6 @@ class $ActivitiesTable extends Activities
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    }
-    if (data.containsKey('athlete_id')) {
-      context.handle(
-        _athleteIdMeta,
-        athleteId.isAcceptableOrUnknown(data['athlete_id']!, _athleteIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_athleteIdMeta);
     }
     if (data.containsKey('started_at_ms')) {
       context.handle(
@@ -946,10 +926,6 @@ class $ActivitiesTable extends Activities
         DriftSqlType.int,
         data['${effectivePrefix}id'],
       )!,
-      athleteId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}athlete_id'],
-      )!,
       startedAtMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}started_at_ms'],
@@ -1001,7 +977,6 @@ class $ActivitiesTable extends Activities
 
 class Activity extends DataClass implements Insertable<Activity> {
   final int id;
-  final int athleteId;
   final int startedAtMs;
   final int durationMs;
   final String? name;
@@ -1014,7 +989,6 @@ class Activity extends DataClass implements Insertable<Activity> {
   final int updatedAtMs;
   const Activity({
     required this.id,
-    required this.athleteId,
     required this.startedAtMs,
     required this.durationMs,
     this.name,
@@ -1030,7 +1004,6 @@ class Activity extends DataClass implements Insertable<Activity> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
-    map['athlete_id'] = Variable<int>(athleteId);
     map['started_at_ms'] = Variable<int>(startedAtMs);
     map['duration_ms'] = Variable<int>(durationMs);
     if (!nullToAbsent || name != null) {
@@ -1059,7 +1032,6 @@ class Activity extends DataClass implements Insertable<Activity> {
   ActivitiesCompanion toCompanion(bool nullToAbsent) {
     return ActivitiesCompanion(
       id: Value(id),
-      athleteId: Value(athleteId),
       startedAtMs: Value(startedAtMs),
       durationMs: Value(durationMs),
       name: name == null && nullToAbsent ? const Value.absent() : Value(name),
@@ -1088,7 +1060,6 @@ class Activity extends DataClass implements Insertable<Activity> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Activity(
       id: serializer.fromJson<int>(json['id']),
-      athleteId: serializer.fromJson<int>(json['athleteId']),
       startedAtMs: serializer.fromJson<int>(json['startedAtMs']),
       durationMs: serializer.fromJson<int>(json['durationMs']),
       name: serializer.fromJson<String?>(json['name']),
@@ -1106,7 +1077,6 @@ class Activity extends DataClass implements Insertable<Activity> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
-      'athleteId': serializer.toJson<int>(athleteId),
       'startedAtMs': serializer.toJson<int>(startedAtMs),
       'durationMs': serializer.toJson<int>(durationMs),
       'name': serializer.toJson<String?>(name),
@@ -1122,7 +1092,6 @@ class Activity extends DataClass implements Insertable<Activity> {
 
   Activity copyWith({
     int? id,
-    int? athleteId,
     int? startedAtMs,
     int? durationMs,
     Value<String?> name = const Value.absent(),
@@ -1135,7 +1104,6 @@ class Activity extends DataClass implements Insertable<Activity> {
     int? updatedAtMs,
   }) => Activity(
     id: id ?? this.id,
-    athleteId: athleteId ?? this.athleteId,
     startedAtMs: startedAtMs ?? this.startedAtMs,
     durationMs: durationMs ?? this.durationMs,
     name: name.present ? name.value : this.name,
@@ -1150,7 +1118,6 @@ class Activity extends DataClass implements Insertable<Activity> {
   Activity copyWithCompanion(ActivitiesCompanion data) {
     return Activity(
       id: data.id.present ? data.id.value : this.id,
-      athleteId: data.athleteId.present ? data.athleteId.value : this.athleteId,
       startedAtMs: data.startedAtMs.present
           ? data.startedAtMs.value
           : this.startedAtMs,
@@ -1178,7 +1145,6 @@ class Activity extends DataClass implements Insertable<Activity> {
   String toString() {
     return (StringBuffer('Activity(')
           ..write('id: $id, ')
-          ..write('athleteId: $athleteId, ')
           ..write('startedAtMs: $startedAtMs, ')
           ..write('durationMs: $durationMs, ')
           ..write('name: $name, ')
@@ -1196,7 +1162,6 @@ class Activity extends DataClass implements Insertable<Activity> {
   @override
   int get hashCode => Object.hash(
     id,
-    athleteId,
     startedAtMs,
     durationMs,
     name,
@@ -1213,7 +1178,6 @@ class Activity extends DataClass implements Insertable<Activity> {
       identical(this, other) ||
       (other is Activity &&
           other.id == this.id &&
-          other.athleteId == this.athleteId &&
           other.startedAtMs == this.startedAtMs &&
           other.durationMs == this.durationMs &&
           other.name == this.name &&
@@ -1228,7 +1192,6 @@ class Activity extends DataClass implements Insertable<Activity> {
 
 class ActivitiesCompanion extends UpdateCompanion<Activity> {
   final Value<int> id;
-  final Value<int> athleteId;
   final Value<int> startedAtMs;
   final Value<int> durationMs;
   final Value<String?> name;
@@ -1241,7 +1204,6 @@ class ActivitiesCompanion extends UpdateCompanion<Activity> {
   final Value<int> updatedAtMs;
   const ActivitiesCompanion({
     this.id = const Value.absent(),
-    this.athleteId = const Value.absent(),
     this.startedAtMs = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.name = const Value.absent(),
@@ -1255,7 +1217,6 @@ class ActivitiesCompanion extends UpdateCompanion<Activity> {
   });
   ActivitiesCompanion.insert({
     this.id = const Value.absent(),
-    required int athleteId,
     required int startedAtMs,
     required int durationMs,
     this.name = const Value.absent(),
@@ -1266,14 +1227,12 @@ class ActivitiesCompanion extends UpdateCompanion<Activity> {
     this.shapeEnd = const Value.absent(),
     required int createdAtMs,
     required int updatedAtMs,
-  }) : athleteId = Value(athleteId),
-       startedAtMs = Value(startedAtMs),
+  }) : startedAtMs = Value(startedAtMs),
        durationMs = Value(durationMs),
        createdAtMs = Value(createdAtMs),
        updatedAtMs = Value(updatedAtMs);
   static Insertable<Activity> custom({
     Expression<int>? id,
-    Expression<int>? athleteId,
     Expression<int>? startedAtMs,
     Expression<int>? durationMs,
     Expression<String>? name,
@@ -1287,7 +1246,6 @@ class ActivitiesCompanion extends UpdateCompanion<Activity> {
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
-      if (athleteId != null) 'athlete_id': athleteId,
       if (startedAtMs != null) 'started_at_ms': startedAtMs,
       if (durationMs != null) 'duration_ms': durationMs,
       if (name != null) 'name': name,
@@ -1303,7 +1261,6 @@ class ActivitiesCompanion extends UpdateCompanion<Activity> {
 
   ActivitiesCompanion copyWith({
     Value<int>? id,
-    Value<int>? athleteId,
     Value<int>? startedAtMs,
     Value<int>? durationMs,
     Value<String?>? name,
@@ -1317,7 +1274,6 @@ class ActivitiesCompanion extends UpdateCompanion<Activity> {
   }) {
     return ActivitiesCompanion(
       id: id ?? this.id,
-      athleteId: athleteId ?? this.athleteId,
       startedAtMs: startedAtMs ?? this.startedAtMs,
       durationMs: durationMs ?? this.durationMs,
       name: name ?? this.name,
@@ -1336,9 +1292,6 @@ class ActivitiesCompanion extends UpdateCompanion<Activity> {
     final map = <String, Expression>{};
     if (id.present) {
       map['id'] = Variable<int>(id.value);
-    }
-    if (athleteId.present) {
-      map['athlete_id'] = Variable<int>(athleteId.value);
     }
     if (startedAtMs.present) {
       map['started_at_ms'] = Variable<int>(startedAtMs.value);
@@ -1377,7 +1330,6 @@ class ActivitiesCompanion extends UpdateCompanion<Activity> {
   String toString() {
     return (StringBuffer('ActivitiesCompanion(')
           ..write('id: $id, ')
-          ..write('athleteId: $athleteId, ')
           ..write('startedAtMs: $startedAtMs, ')
           ..write('durationMs: $durationMs, ')
           ..write('name: $name, ')
@@ -1440,6 +1392,20 @@ class $SampleSetsTable extends SampleSets
       'REFERENCES devices (id) ON DELETE SET NULL',
     ),
   );
+  static const VerificationMeta _athleteIdMeta = const VerificationMeta(
+    'athleteId',
+  );
+  @override
+  late final GeneratedColumn<int> athleteId = GeneratedColumn<int>(
+    'athlete_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES athletes (id) ON DELETE CASCADE',
+    ),
+  );
   static const VerificationMeta _kindMeta = const VerificationMeta('kind');
   @override
   late final GeneratedColumn<String> kind = GeneratedColumn<String>(
@@ -1450,7 +1416,13 @@ class $SampleSetsTable extends SampleSets
     requiredDuringInsert: true,
   );
   @override
-  List<GeneratedColumn> get $columns => [id, activityId, deviceId, kind];
+  List<GeneratedColumn> get $columns => [
+    id,
+    activityId,
+    deviceId,
+    athleteId,
+    kind,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1478,6 +1450,12 @@ class $SampleSetsTable extends SampleSets
       context.handle(
         _deviceIdMeta,
         deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    }
+    if (data.containsKey('athlete_id')) {
+      context.handle(
+        _athleteIdMeta,
+        athleteId.isAcceptableOrUnknown(data['athlete_id']!, _athleteIdMeta),
       );
     }
     if (data.containsKey('kind')) {
@@ -1509,6 +1487,10 @@ class $SampleSetsTable extends SampleSets
         DriftSqlType.int,
         data['${effectivePrefix}device_id'],
       ),
+      athleteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}athlete_id'],
+      ),
       kind: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}kind'],
@@ -1526,11 +1508,13 @@ class SampleSet extends DataClass implements Insertable<SampleSet> {
   final int id;
   final int activityId;
   final int? deviceId;
+  final int? athleteId;
   final String kind;
   const SampleSet({
     required this.id,
     required this.activityId,
     this.deviceId,
+    this.athleteId,
     required this.kind,
   });
   @override
@@ -1540,6 +1524,9 @@ class SampleSet extends DataClass implements Insertable<SampleSet> {
     map['activity_id'] = Variable<int>(activityId);
     if (!nullToAbsent || deviceId != null) {
       map['device_id'] = Variable<int>(deviceId);
+    }
+    if (!nullToAbsent || athleteId != null) {
+      map['athlete_id'] = Variable<int>(athleteId);
     }
     map['kind'] = Variable<String>(kind);
     return map;
@@ -1552,6 +1539,9 @@ class SampleSet extends DataClass implements Insertable<SampleSet> {
       deviceId: deviceId == null && nullToAbsent
           ? const Value.absent()
           : Value(deviceId),
+      athleteId: athleteId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(athleteId),
       kind: Value(kind),
     );
   }
@@ -1565,6 +1555,7 @@ class SampleSet extends DataClass implements Insertable<SampleSet> {
       id: serializer.fromJson<int>(json['id']),
       activityId: serializer.fromJson<int>(json['activityId']),
       deviceId: serializer.fromJson<int?>(json['deviceId']),
+      athleteId: serializer.fromJson<int?>(json['athleteId']),
       kind: serializer.fromJson<String>(json['kind']),
     );
   }
@@ -1575,6 +1566,7 @@ class SampleSet extends DataClass implements Insertable<SampleSet> {
       'id': serializer.toJson<int>(id),
       'activityId': serializer.toJson<int>(activityId),
       'deviceId': serializer.toJson<int?>(deviceId),
+      'athleteId': serializer.toJson<int?>(athleteId),
       'kind': serializer.toJson<String>(kind),
     };
   }
@@ -1583,11 +1575,13 @@ class SampleSet extends DataClass implements Insertable<SampleSet> {
     int? id,
     int? activityId,
     Value<int?> deviceId = const Value.absent(),
+    Value<int?> athleteId = const Value.absent(),
     String? kind,
   }) => SampleSet(
     id: id ?? this.id,
     activityId: activityId ?? this.activityId,
     deviceId: deviceId.present ? deviceId.value : this.deviceId,
+    athleteId: athleteId.present ? athleteId.value : this.athleteId,
     kind: kind ?? this.kind,
   );
   SampleSet copyWithCompanion(SampleSetsCompanion data) {
@@ -1597,6 +1591,7 @@ class SampleSet extends DataClass implements Insertable<SampleSet> {
           ? data.activityId.value
           : this.activityId,
       deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      athleteId: data.athleteId.present ? data.athleteId.value : this.athleteId,
       kind: data.kind.present ? data.kind.value : this.kind,
     );
   }
@@ -1607,13 +1602,14 @@ class SampleSet extends DataClass implements Insertable<SampleSet> {
           ..write('id: $id, ')
           ..write('activityId: $activityId, ')
           ..write('deviceId: $deviceId, ')
+          ..write('athleteId: $athleteId, ')
           ..write('kind: $kind')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, activityId, deviceId, kind);
+  int get hashCode => Object.hash(id, activityId, deviceId, athleteId, kind);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1621,6 +1617,7 @@ class SampleSet extends DataClass implements Insertable<SampleSet> {
           other.id == this.id &&
           other.activityId == this.activityId &&
           other.deviceId == this.deviceId &&
+          other.athleteId == this.athleteId &&
           other.kind == this.kind);
 }
 
@@ -1628,17 +1625,20 @@ class SampleSetsCompanion extends UpdateCompanion<SampleSet> {
   final Value<int> id;
   final Value<int> activityId;
   final Value<int?> deviceId;
+  final Value<int?> athleteId;
   final Value<String> kind;
   const SampleSetsCompanion({
     this.id = const Value.absent(),
     this.activityId = const Value.absent(),
     this.deviceId = const Value.absent(),
+    this.athleteId = const Value.absent(),
     this.kind = const Value.absent(),
   });
   SampleSetsCompanion.insert({
     this.id = const Value.absent(),
     required int activityId,
     this.deviceId = const Value.absent(),
+    this.athleteId = const Value.absent(),
     required String kind,
   }) : activityId = Value(activityId),
        kind = Value(kind);
@@ -1646,12 +1646,14 @@ class SampleSetsCompanion extends UpdateCompanion<SampleSet> {
     Expression<int>? id,
     Expression<int>? activityId,
     Expression<int>? deviceId,
+    Expression<int>? athleteId,
     Expression<String>? kind,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (activityId != null) 'activity_id': activityId,
       if (deviceId != null) 'device_id': deviceId,
+      if (athleteId != null) 'athlete_id': athleteId,
       if (kind != null) 'kind': kind,
     });
   }
@@ -1660,12 +1662,14 @@ class SampleSetsCompanion extends UpdateCompanion<SampleSet> {
     Value<int>? id,
     Value<int>? activityId,
     Value<int?>? deviceId,
+    Value<int?>? athleteId,
     Value<String>? kind,
   }) {
     return SampleSetsCompanion(
       id: id ?? this.id,
       activityId: activityId ?? this.activityId,
       deviceId: deviceId ?? this.deviceId,
+      athleteId: athleteId ?? this.athleteId,
       kind: kind ?? this.kind,
     );
   }
@@ -1682,6 +1686,9 @@ class SampleSetsCompanion extends UpdateCompanion<SampleSet> {
     if (deviceId.present) {
       map['device_id'] = Variable<int>(deviceId.value);
     }
+    if (athleteId.present) {
+      map['athlete_id'] = Variable<int>(athleteId.value);
+    }
     if (kind.present) {
       map['kind'] = Variable<String>(kind.value);
     }
@@ -1694,6 +1701,7 @@ class SampleSetsCompanion extends UpdateCompanion<SampleSet> {
           ..write('id: $id, ')
           ..write('activityId: $activityId, ')
           ..write('deviceId: $deviceId, ')
+          ..write('athleteId: $athleteId, ')
           ..write('kind: $kind')
           ..write(')'))
         .toString();
@@ -2388,6 +2396,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
+        'athletes',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sample_sets', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
         'sample_sets',
         limitUpdateKind: UpdateKind.delete,
       ),
@@ -2419,6 +2434,29 @@ typedef $$AthletesTableUpdateCompanionBuilder =
       Value<int?> maxHeartrate,
       Value<int> createdAtMs,
     });
+
+final class $$AthletesTableReferences
+    extends BaseReferences<_$AppDatabase, $AthletesTable, Athlete> {
+  $$AthletesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$SampleSetsTable, List<SampleSet>>
+  _sampleSetsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.sampleSets,
+    aliasName: 'athletes__id__sample_sets__athlete_id',
+  );
+
+  $$SampleSetsTableProcessedTableManager get sampleSetsRefs {
+    final manager = $$SampleSetsTableTableManager(
+      $_db,
+      $_db.sampleSets,
+    ).filter((f) => f.athleteId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_sampleSetsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$AthletesTableFilterComposer
     extends Composer<_$AppDatabase, $AthletesTable> {
@@ -2453,6 +2491,31 @@ class $$AthletesTableFilterComposer
     column: $table.createdAtMs,
     builder: (column) => ColumnFilters(column),
   );
+
+  Expression<bool> sampleSetsRefs(
+    Expression<bool> Function($$SampleSetsTableFilterComposer f) f,
+  ) {
+    final $$SampleSetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.sampleSets,
+      getReferencedColumn: (t) => t.athleteId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SampleSetsTableFilterComposer(
+            $db: $db,
+            $table: $db.sampleSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$AthletesTableOrderingComposer
@@ -2519,6 +2582,31 @@ class $$AthletesTableAnnotationComposer
     column: $table.createdAtMs,
     builder: (column) => column,
   );
+
+  Expression<T> sampleSetsRefs<T extends Object>(
+    Expression<T> Function($$SampleSetsTableAnnotationComposer a) f,
+  ) {
+    final $$SampleSetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.sampleSets,
+      getReferencedColumn: (t) => t.athleteId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SampleSetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.sampleSets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$AthletesTableTableManager
@@ -2532,9 +2620,9 @@ class $$AthletesTableTableManager
           $$AthletesTableAnnotationComposer,
           $$AthletesTableCreateCompanionBuilder,
           $$AthletesTableUpdateCompanionBuilder,
-          (Athlete, BaseReferences<_$AppDatabase, $AthletesTable, Athlete>),
+          (Athlete, $$AthletesTableReferences),
           Athlete,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool sampleSetsRefs})
         > {
   $$AthletesTableTableManager(_$AppDatabase db, $AthletesTable table)
     : super(
@@ -2576,9 +2664,42 @@ class $$AthletesTableTableManager
                 createdAtMs: createdAtMs,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$AthletesTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({sampleSetsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (sampleSetsRefs) db.sampleSets],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (sampleSetsRefs)
+                    await $_getPrefetchedData<
+                      Athlete,
+                      $AthletesTable,
+                      SampleSet
+                    >(
+                      currentTable: table,
+                      referencedTable: $$AthletesTableReferences
+                          ._sampleSetsRefsTable(db),
+                      managerFromTypedResult: (p0) => $$AthletesTableReferences(
+                        db,
+                        table,
+                        p0,
+                      ).sampleSetsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.athleteId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
         ),
       );
 }
@@ -2593,9 +2714,9 @@ typedef $$AthletesTableProcessedTableManager =
       $$AthletesTableAnnotationComposer,
       $$AthletesTableCreateCompanionBuilder,
       $$AthletesTableUpdateCompanionBuilder,
-      (Athlete, BaseReferences<_$AppDatabase, $AthletesTable, Athlete>),
+      (Athlete, $$AthletesTableReferences),
       Athlete,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool sampleSetsRefs})
     >;
 typedef $$DevicesTableCreateCompanionBuilder =
     DevicesCompanion Function({
@@ -2619,7 +2740,7 @@ final class $$DevicesTableReferences
   static MultiTypedResultKey<$SampleSetsTable, List<SampleSet>>
   _sampleSetsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.sampleSets,
-    aliasName: $_aliasNameGenerator(db.devices.id, db.sampleSets.deviceId),
+    aliasName: 'devices__id__sample_sets__device_id',
   );
 
   $$SampleSetsTableProcessedTableManager get sampleSetsRefs {
@@ -2875,7 +2996,6 @@ typedef $$DevicesTableProcessedTableManager =
 typedef $$ActivitiesTableCreateCompanionBuilder =
     ActivitiesCompanion Function({
       Value<int> id,
-      required int athleteId,
       required int startedAtMs,
       required int durationMs,
       Value<String?> name,
@@ -2890,7 +3010,6 @@ typedef $$ActivitiesTableCreateCompanionBuilder =
 typedef $$ActivitiesTableUpdateCompanionBuilder =
     ActivitiesCompanion Function({
       Value<int> id,
-      Value<int> athleteId,
       Value<int> startedAtMs,
       Value<int> durationMs,
       Value<String?> name,
@@ -2910,7 +3029,7 @@ final class $$ActivitiesTableReferences
   static MultiTypedResultKey<$SampleSetsTable, List<SampleSet>>
   _sampleSetsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.sampleSets,
-    aliasName: $_aliasNameGenerator(db.activities.id, db.sampleSets.activityId),
+    aliasName: 'activities__id__sample_sets__activity_id',
   );
 
   $$SampleSetsTableProcessedTableManager get sampleSetsRefs {
@@ -2929,7 +3048,7 @@ final class $$ActivitiesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.markers,
-    aliasName: $_aliasNameGenerator(db.activities.id, db.markers.activityId),
+    aliasName: 'activities__id__markers__activity_id',
   );
 
   $$MarkersTableProcessedTableManager get markersRefs {
@@ -2956,11 +3075,6 @@ class $$ActivitiesTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
     column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get athleteId => $composableBuilder(
-    column: $table.athleteId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3079,11 +3193,6 @@ class $$ActivitiesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get athleteId => $composableBuilder(
-    column: $table.athleteId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get startedAtMs => $composableBuilder(
     column: $table.startedAtMs,
     builder: (column) => ColumnOrderings(column),
@@ -3146,9 +3255,6 @@ class $$ActivitiesTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<int> get athleteId =>
-      $composableBuilder(column: $table.athleteId, builder: (column) => column);
 
   GeneratedColumn<int> get startedAtMs => $composableBuilder(
     column: $table.startedAtMs,
@@ -3270,7 +3376,6 @@ class $$ActivitiesTableTableManager
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
-                Value<int> athleteId = const Value.absent(),
                 Value<int> startedAtMs = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<String?> name = const Value.absent(),
@@ -3283,7 +3388,6 @@ class $$ActivitiesTableTableManager
                 Value<int> updatedAtMs = const Value.absent(),
               }) => ActivitiesCompanion(
                 id: id,
-                athleteId: athleteId,
                 startedAtMs: startedAtMs,
                 durationMs: durationMs,
                 name: name,
@@ -3298,7 +3402,6 @@ class $$ActivitiesTableTableManager
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
-                required int athleteId,
                 required int startedAtMs,
                 required int durationMs,
                 Value<String?> name = const Value.absent(),
@@ -3311,7 +3414,6 @@ class $$ActivitiesTableTableManager
                 required int updatedAtMs,
               }) => ActivitiesCompanion.insert(
                 id: id,
-                athleteId: athleteId,
                 startedAtMs: startedAtMs,
                 durationMs: durationMs,
                 name: name,
@@ -3411,6 +3513,7 @@ typedef $$SampleSetsTableCreateCompanionBuilder =
       Value<int> id,
       required int activityId,
       Value<int?> deviceId,
+      Value<int?> athleteId,
       required String kind,
     });
 typedef $$SampleSetsTableUpdateCompanionBuilder =
@@ -3418,6 +3521,7 @@ typedef $$SampleSetsTableUpdateCompanionBuilder =
       Value<int> id,
       Value<int> activityId,
       Value<int?> deviceId,
+      Value<int?> athleteId,
       Value<String> kind,
     });
 
@@ -3426,9 +3530,7 @@ final class $$SampleSetsTableReferences
   $$SampleSetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ActivitiesTable _activityIdTable(_$AppDatabase db) =>
-      db.activities.createAlias(
-        $_aliasNameGenerator(db.sampleSets.activityId, db.activities.id),
-      );
+      db.activities.createAlias('sample_sets__activity_id__activities__id');
 
   $$ActivitiesTableProcessedTableManager get activityId {
     final $_column = $_itemColumn<int>('activity_id')!;
@@ -3444,8 +3546,8 @@ final class $$SampleSetsTableReferences
     );
   }
 
-  static $DevicesTable _deviceIdTable(_$AppDatabase db) => db.devices
-      .createAlias($_aliasNameGenerator(db.sampleSets.deviceId, db.devices.id));
+  static $DevicesTable _deviceIdTable(_$AppDatabase db) =>
+      db.devices.createAlias('sample_sets__device_id__devices__id');
 
   $$DevicesTableProcessedTableManager? get deviceId {
     final $_column = $_itemColumn<int>('device_id');
@@ -3461,10 +3563,27 @@ final class $$SampleSetsTableReferences
     );
   }
 
+  static $AthletesTable _athleteIdTable(_$AppDatabase db) =>
+      db.athletes.createAlias('sample_sets__athlete_id__athletes__id');
+
+  $$AthletesTableProcessedTableManager? get athleteId {
+    final $_column = $_itemColumn<int>('athlete_id');
+    if ($_column == null) return null;
+    final manager = $$AthletesTableTableManager(
+      $_db,
+      $_db.athletes,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_athleteIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
   static MultiTypedResultKey<$HrSamplesTable, List<HrSampleRow>>
   _hrSamplesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.hrSamples,
-    aliasName: $_aliasNameGenerator(db.sampleSets.id, db.hrSamples.setId),
+    aliasName: 'sample_sets__id__hr_samples__set_id',
   );
 
   $$HrSamplesTableProcessedTableManager get hrSamplesRefs {
@@ -3536,6 +3655,29 @@ class $$SampleSetsTableFilterComposer
           }) => $$DevicesTableFilterComposer(
             $db: $db,
             $table: $db.devices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AthletesTableFilterComposer get athleteId {
+    final $$AthletesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.athleteId,
+      referencedTable: $db.athletes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AthletesTableFilterComposer(
+            $db: $db,
+            $table: $db.athletes,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -3635,6 +3777,29 @@ class $$SampleSetsTableOrderingComposer
     );
     return composer;
   }
+
+  $$AthletesTableOrderingComposer get athleteId {
+    final $$AthletesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.athleteId,
+      referencedTable: $db.athletes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AthletesTableOrderingComposer(
+            $db: $db,
+            $table: $db.athletes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$SampleSetsTableAnnotationComposer
@@ -3698,6 +3863,29 @@ class $$SampleSetsTableAnnotationComposer
     return composer;
   }
 
+  $$AthletesTableAnnotationComposer get athleteId {
+    final $$AthletesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.athleteId,
+      referencedTable: $db.athletes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AthletesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.athletes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   Expression<T> hrSamplesRefs<T extends Object>(
     Expression<T> Function($$HrSamplesTableAnnotationComposer a) f,
   ) {
@@ -3740,6 +3928,7 @@ class $$SampleSetsTableTableManager
           PrefetchHooks Function({
             bool activityId,
             bool deviceId,
+            bool athleteId,
             bool hrSamplesRefs,
           })
         > {
@@ -3759,11 +3948,13 @@ class $$SampleSetsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<int> activityId = const Value.absent(),
                 Value<int?> deviceId = const Value.absent(),
+                Value<int?> athleteId = const Value.absent(),
                 Value<String> kind = const Value.absent(),
               }) => SampleSetsCompanion(
                 id: id,
                 activityId: activityId,
                 deviceId: deviceId,
+                athleteId: athleteId,
                 kind: kind,
               ),
           createCompanionCallback:
@@ -3771,11 +3962,13 @@ class $$SampleSetsTableTableManager
                 Value<int> id = const Value.absent(),
                 required int activityId,
                 Value<int?> deviceId = const Value.absent(),
+                Value<int?> athleteId = const Value.absent(),
                 required String kind,
               }) => SampleSetsCompanion.insert(
                 id: id,
                 activityId: activityId,
                 deviceId: deviceId,
+                athleteId: athleteId,
                 kind: kind,
               ),
           withReferenceMapper: (p0) => p0
@@ -3787,7 +3980,12 @@ class $$SampleSetsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({activityId = false, deviceId = false, hrSamplesRefs = false}) {
+              ({
+                activityId = false,
+                deviceId = false,
+                athleteId = false,
+                hrSamplesRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [if (hrSamplesRefs) db.hrSamples],
@@ -3831,6 +4029,20 @@ class $$SampleSetsTableTableManager
                                     referencedColumn:
                                         $$SampleSetsTableReferences
                                             ._deviceIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (athleteId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.athleteId,
+                                    referencedTable: $$SampleSetsTableReferences
+                                        ._athleteIdTable(db),
+                                    referencedColumn:
+                                        $$SampleSetsTableReferences
+                                            ._athleteIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -3884,6 +4096,7 @@ typedef $$SampleSetsTableProcessedTableManager =
       PrefetchHooks Function({
         bool activityId,
         bool deviceId,
+        bool athleteId,
         bool hrSamplesRefs,
       })
     >;
@@ -3904,8 +4117,8 @@ final class $$HrSamplesTableReferences
     extends BaseReferences<_$AppDatabase, $HrSamplesTable, HrSampleRow> {
   $$HrSamplesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $SampleSetsTable _setIdTable(_$AppDatabase db) => db.sampleSets
-      .createAlias($_aliasNameGenerator(db.hrSamples.setId, db.sampleSets.id));
+  static $SampleSetsTable _setIdTable(_$AppDatabase db) =>
+      db.sampleSets.createAlias('hr_samples__set_id__sample_sets__id');
 
   $$SampleSetsTableProcessedTableManager get setId {
     final $_column = $_itemColumn<int>('set_id')!;
@@ -4176,9 +4389,7 @@ final class $$MarkersTableReferences
   $$MarkersTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ActivitiesTable _activityIdTable(_$AppDatabase db) =>
-      db.activities.createAlias(
-        $_aliasNameGenerator(db.markers.activityId, db.activities.id),
-      );
+      db.activities.createAlias('markers__activity_id__activities__id');
 
   $$ActivitiesTableProcessedTableManager get activityId {
     final $_column = $_itemColumn<int>('activity_id')!;

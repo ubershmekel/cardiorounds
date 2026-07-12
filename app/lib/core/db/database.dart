@@ -53,7 +53,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -90,9 +90,18 @@ class AppDatabase extends _$AppDatabase {
                       'without device associations',
                 );
               }
+              // createTable(sampleSets) uses the current schema, so the set
+              // already has an athlete_id column here. Carry the activity's
+              // athlete down now, before the activities rebuild below drops the
+              // column — a guarded subquery leaves it NULL if the id dangles
+              // (v1 had no FK on activities.athlete_id). This makes the v3 block
+              // a no-op on the v1 path.
               await customStatement(
-                "INSERT INTO sample_sets (id, activity_id, device_id, kind) "
+                "INSERT INTO sample_sets "
+                "(id, activity_id, device_id, athlete_id, kind) "
                 "SELECT id, id, ${hasActivityDeviceId ? 'device_id' : 'NULL'}, "
+                "(SELECT ath.id FROM athletes ath "
+                "WHERE ath.id = activities.athlete_id), "
                 "'hr' FROM activities",
               );
               await customStatement(
@@ -153,6 +162,54 @@ class AppDatabase extends _$AppDatabase {
                     'copied ${hrRows.data['c']} hr_samples',
               );
             }
+            if (from < 3) {
+              // Move athlete attribution from the activity onto the stream. On
+              // the v1 path the from<2 block already created sample_sets with
+              // the column, populated it, and dropped activities.athlete_id, so
+              // both guards below are false and this is a no-op. Only a database
+              // coming straight from v2 needs the column added and back-filled.
+              final setColumns = await customSelect(
+                'PRAGMA table_info(sample_sets)',
+              ).get();
+              final hasSetAthleteId = setColumns.any(
+                (c) => c.data['name'] == 'athlete_id',
+              );
+              if (!hasSetAthleteId) {
+                await customStatement(
+                  'ALTER TABLE sample_sets ADD COLUMN athlete_id INTEGER '
+                  'REFERENCES athletes (id) ON DELETE CASCADE',
+                );
+              }
+              final activityColumns = await customSelect(
+                'PRAGMA table_info(activities)',
+              ).get();
+              final hasActivityAthleteId = activityColumns.any(
+                (c) => c.data['name'] == 'athlete_id',
+              );
+              if (hasActivityAthleteId) {
+                // Copy each activity's athlete down to its streams; the join
+                // guards a dangling athlete_id (activities had no FK) to NULL so
+                // it can't trip the foreign_key_check below.
+                await customStatement(
+                  'UPDATE sample_sets SET athlete_id = ('
+                  'SELECT ath.id FROM activities a '
+                  'JOIN athletes ath ON ath.id = a.athlete_id '
+                  'WHERE a.id = sample_sets.activity_id)',
+                );
+                // Drop activities.athlete_id (moved to sample_sets); rebuilds the
+                // table from the current schema.
+                await m.alterTable(TableMigration(activities));
+                final attributed = await customSelect(
+                  'SELECT COUNT(*) AS c FROM sample_sets '
+                  'WHERE athlete_id IS NOT NULL',
+                ).getSingle();
+                appLog(
+                  'Migration',
+                  'v3: attributed ${attributed.data['c']} sample_sets to an '
+                      'athlete',
+                );
+              }
+            }
           });
           // customSelect (not customStatement) so the result rows are read and a
           // violation actually fails the migration instead of opening a bad DB.
@@ -161,7 +218,7 @@ class AppDatabase extends _$AppDatabase {
           ).get();
           if (violations.isNotEmpty) {
             throw StateError(
-              'Migration to v2 left foreign key violations: '
+              'Migration to v$to left foreign key violations: '
               '${violations.map((r) => r.data).toList()}',
             );
           }
@@ -306,7 +363,6 @@ class AppDatabase extends _$AppDatabase {
     return transaction(() async {
       final activityId = await into(activities).insert(
         ActivitiesCompanion.insert(
-          athleteId: athleteId,
           startedAtMs: startedAtMs,
           durationMs: 0,
           sportType: Value(sportType),
@@ -316,12 +372,15 @@ class AppDatabase extends _$AppDatabase {
       );
       final hrSetIds = <int>[];
       for (final deviceId in deviceIds) {
+        // Every new stream is attributed to the recording athlete; the user can
+        // re-attribute per device afterward. See multi-athlete.md.
         hrSetIds.add(
           await into(sampleSets).insert(
             SampleSetsCompanion.insert(
               activityId: activityId,
               kind: 'hr',
               deviceId: Value(deviceId),
+              athleteId: Value(athleteId),
             ),
           ),
         );
