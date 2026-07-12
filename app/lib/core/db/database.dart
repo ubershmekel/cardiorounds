@@ -252,7 +252,13 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<Athlete> ensureDefaultAthlete() async {
-    final existing = await (select(athletes)..limit(1)).getSingleOrNull();
+    // The default athlete is the lowest-id row; order explicitly so it stays
+    // stable once several athletes exist. See docs/design/multi-athlete.md.
+    final existing =
+        await (select(athletes)
+              ..orderBy([(a) => OrderingTerm.asc(a.id)])
+              ..limit(1))
+            .getSingleOrNull();
     if (existing != null) return existing;
     final id = await into(athletes).insert(
       AthletesCompanion.insert(
@@ -264,7 +270,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Stream<Athlete> watchDefaultAthlete() {
-    return (select(athletes)..limit(1)).watchSingle();
+    return (select(athletes)
+          ..orderBy([(a) => OrderingTerm.asc(a.id)])
+          ..limit(1))
+        .watchSingle();
   }
 
   Future<void> updateAthlete({
@@ -290,6 +299,98 @@ class AppDatabase extends _$AppDatabase {
                   : Value(maxHeartrate)),
       ),
     );
+  }
+
+  /// All athletes, oldest first. The lowest-id row is the default athlete (see
+  /// [watchDefaultAthlete]). Drives the athlete-management pager.
+  Stream<List<Athlete>> watchAthletes() {
+    return (select(athletes)..orderBy([(a) => OrderingTerm.asc(a.id)])).watch();
+  }
+
+  /// Creates a new athlete (blank by default) and returns the row.
+  Future<Athlete> insertAthlete({
+    String name = '',
+    int? restingHeartrate,
+    int? maxHeartrate,
+  }) async {
+    final id = await into(athletes).insert(
+      AthletesCompanion.insert(
+        name: name,
+        restingHeartrate: Value(restingHeartrate),
+        maxHeartrate: Value(maxHeartrate),
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+    return (select(athletes)..where((a) => a.id.equals(id))).getSingle();
+  }
+
+  /// How many workouts deleting [athleteId] would remove entirely — activities
+  /// where *every* stream is this athlete's. Shared sessions (a stream from
+  /// someone else, or an unattributed one) survive and are not counted. Powers
+  /// the delete-warning's blast-radius number. Anti-join subqueries, so no bind
+  /// list grows with an athlete's history.
+  Future<int> countWorkoutsOnlyFromAthlete(int athleteId) async {
+    final row = await customSelect(
+      'SELECT COUNT(*) AS c FROM activities a '
+      'WHERE EXISTS (SELECT 1 FROM sample_sets s '
+      'WHERE s.activity_id = a.id AND s.athlete_id = ?1) '
+      'AND NOT EXISTS (SELECT 1 FROM sample_sets s '
+      'WHERE s.activity_id = a.id '
+      'AND (s.athlete_id IS NULL OR s.athlete_id != ?1))',
+      variables: [Variable.withInt(athleteId)],
+      readsFrom: {sampleSets, activities},
+    ).getSingle();
+    return row.data['c'] as int;
+  }
+
+  /// Deletes an athlete and every workout recorded solely from them. Their
+  /// sample sets cascade away (with their hr_samples via the FK); any activity
+  /// left with no remaining sets — a session only this athlete recorded — is
+  /// deleted too (its markers cascade). Shared sessions keep their other
+  /// streams. Refuses to remove the last athlete, since the app requires at
+  /// least one. See docs/design/multi-athlete.md.
+  Future<void> deleteAthlete(int athleteId) async {
+    await transaction(() async {
+      final total = await athletes.count().getSingle();
+      if (total <= 1) {
+        throw StateError('Cannot delete the last remaining athlete');
+      }
+      // Cascade removes this athlete's sample_sets (and their hr_samples).
+      await (delete(athletes)..where((a) => a.id.equals(athleteId))).go();
+      // Every activity is created with >=1 set, so an activity now holding none
+      // can only be one this cascade just emptied — a session only this athlete
+      // recorded. Delete those (markers cascade). An anti-join avoids building
+      // an IN (...) list that could exceed SQLite's bind limit on big histories.
+      final removed = await customUpdate(
+        'DELETE FROM activities WHERE NOT EXISTS '
+        '(SELECT 1 FROM sample_sets s WHERE s.activity_id = activities.id)',
+        updates: {activities},
+        updateKind: UpdateKind.delete,
+      );
+      appLog(
+        'Athletes',
+        'Deleted athlete $athleteId: removed $removed solo workouts',
+      );
+    });
+  }
+
+  /// The athlete an activity is attributed to — its **primary** (lowest-id) HR
+  /// set's athlete — or null when that stream is unattributed. See
+  /// docs/design/multi-athlete.md.
+  Future<Athlete?> athleteForActivity(int activityId) async {
+    final primary =
+        await (select(sampleSets)
+              ..where(
+                (s) => s.activityId.equals(activityId) & s.kind.equals('hr'),
+              )
+              ..orderBy([(s) => OrderingTerm.asc(s.id)])
+              ..limit(1))
+            .getSingleOrNull();
+    final ownerId = primary?.athleteId;
+    if (ownerId == null) return null;
+    return (select(
+      athletes,
+    )..where((a) => a.id.equals(ownerId))).getSingleOrNull();
   }
 
   Stream<List<Activity>> watchActivities() {
