@@ -20,7 +20,8 @@ CREATE TABLE devices (
 
 CREATE TABLE activities (
   id INTEGER PRIMARY KEY,
-  athlete_id INTEGER NOT NULL,
+  -- No athlete_id: attribution is per-stream, on sample_sets.athlete_id. An
+  -- activity's owner is derived from its primary HR set. See multi-athlete.md.
   started_at_ms INTEGER NOT NULL,
   duration_ms INTEGER NOT NULL,
 
@@ -43,12 +44,16 @@ CREATE TABLE sample_sets (
   id INTEGER PRIMARY KEY,
   activity_id INTEGER NOT NULL,
   device_id INTEGER,               -- NULL if device was deleted
+  athlete_id INTEGER,              -- who wore this device; NULL = unattributed
   kind TEXT NOT NULL,              -- 'hr' (future: 'location', 'spo2', ...)
-  -- label / color / athlete_id land here when multi-athlete / multi-signal UI
-  -- needs them; all additive, no sample-grain migration.
+  -- label / color land here when multi-signal UI needs them; additive.
 
   FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
-  FOREIGN KEY (device_id)  REFERENCES devices(id)    ON DELETE SET NULL
+  FOREIGN KEY (device_id)  REFERENCES devices(id)    ON DELETE SET NULL,
+  -- CASCADE: deleting an athlete removes their streams (hr_samples cascade in
+  -- turn); the DAO then deletes any activity left with no sets. See
+  -- multi-athlete.md.
+  FOREIGN KEY (athlete_id) REFERENCES athletes(id)   ON DELETE CASCADE
 );
 
 CREATE INDEX sample_sets_activity_kind_idx
@@ -116,10 +121,11 @@ elevation) without reworking how samples are stored.
   live in is convention keyed off `kind`, not an enforced foreign key. We
   deliberately do _not_ add `CHECK (kind IN (...))` — a hard check would force a
   table rebuild every time a new signal kind is introduced.
-- **Per-stream athlete is intentionally deferred.** A second device may be a
-  second sensor on the same athlete _or_ a second person in a group session.
-  When that distinction needs storage, add a nullable `sample_sets.athlete_id`;
-  no sample table changes.
+- **Per-stream athlete is the attribution grain.** A second device may be a
+  second sensor on the same athlete _or_ a second person in a group session, so
+  `athlete_id` lives on `sample_sets` (nullable), never on the activity. An
+  activity's owner is derived from its primary set. See
+  [multi-athlete.md](multi-athlete.md).
 - **Device deletion stays graceful.** `device_id` is on `sample_sets` and off
   the sample primary key, so `ON DELETE SET NULL` still works. (Putting
   `device_id` in a `WITHOUT ROWID` sample PK was rejected: PK columns cannot be
@@ -153,10 +159,13 @@ generate per-person markers.
 
 ### Settings storage
 
-`max_heartrate` and `resting_heartrate` are stored on the `athletes` row. The UI
-in v0 treats the app as single-athlete (one implicit athlete is created on first
-launch), but the DB is intentionally designed for multiple athletes to avoid a
-painful migration later.
+`max_heartrate` and `resting_heartrate` are stored on the `athletes` row. The app
+is single-athlete by default (one implicit athlete created on first launch), and
+the DB was always designed for multiple athletes. The tucked-away multi-athlete
+UI (Advanced → Manage athletes) surfaces the extra rows; see
+[multi-athlete.md](multi-athlete.md). The app guarantees **≥1 athlete always
+exists** — `watchDefaultAthlete()` reads the lowest-`id` row as the default, and
+deleting the last athlete is not offered.
 
 ### Load score window
 
@@ -202,6 +211,26 @@ from `activity_id` to `set_id`, which `ALTER TABLE ... RENAME` cannot do. Drop
 changes with foreign keys disabled, then `PRAGMA foreign_key_check` before
 re-enabling, and cover the whole path with a migration test from a real v1
 schema fixture.
+
+### Migration v2 → v3 (per-stream `athlete_id`)
+
+Move athlete attribution from the activity onto the stream:
+
+```sql
+-- Add the column, back-fill each set from its parent activity's old athlete,
+-- then drop activities.athlete_id.
+ALTER TABLE sample_sets ADD COLUMN athlete_id INTEGER
+  REFERENCES athletes(id) ON DELETE CASCADE;
+
+UPDATE sample_sets
+SET athlete_id = (SELECT a.athlete_id FROM activities a WHERE a.id = activity_id);
+```
+
+Dropping `activities.athlete_id` is a table rebuild (SQLite can't drop a column
+in place on older engines). Run the whole migration with foreign keys disabled
+inside an exclusive block, `PRAGMA foreign_key_check` before re-enabling, and
+cover it with a migration test from a real v2 schema fixture — same discipline as
+v1 → v2. See [multi-athlete.md](multi-athlete.md).
 
 ## Files
 

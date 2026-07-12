@@ -61,10 +61,11 @@ shared session fields (start time, elapsed, stopped).
 
 Each device shows its **own** min / avg / max and **time-in-zone** breakdown,
 both live and on review — these are per-stream, not aggregated. Min/avg/max are
-plain BPM stats. Time-in-zone is scored against the single athlete's max/resting
-HR (the only zones we have): exact for one-athlete-multi-sensor, approximate
-when the devices are different people, until per-device `athlete_id` exists. The
-per-device color swatch + name head each block.
+plain BPM stats. Time-in-zone is scored against **that stream's athlete's**
+max/resting HR when the stream is attributed (see
+[multi-athlete.md](multi-athlete.md)); streams fall back to the default athlete's
+zones when unattributed or when only one athlete exists. The per-device color
+swatch + name head each block.
 
 The activity-level **duration**, **shape** (per-third max HR), and **load
 score** (extra beats) are single-athlete analysis defaults. They are still shown
@@ -99,10 +100,11 @@ device's `CBPeripheral.identifier` (its UUID):
 - **Restore adopts all peripherals.** A BLE relaunch (`willRestoreState`) re-adopts
   every peripheral iOS hands back, not just the first.
 
-This keying is also what the upcoming **multiple-athletes** work builds on: a set
-already carries its `device_id`, and per-device streams map cleanly onto a future
-per-device `athlete_id`. Nothing here aggregates across devices, so adding
-athletes is a labelling/attribution change, not a stream-routing one.
+This keying is also what the **multiple-athletes** work builds on: a set already
+carries its `device_id`, and per-device streams map cleanly onto
+`sample_sets.athlete_id` (see [multi-athlete.md](multi-athlete.md)). Nothing here
+aggregates across devices, so attributing athletes is a labelling change, not a
+stream-routing one.
 
 ## Crash recovery (all devices)
 

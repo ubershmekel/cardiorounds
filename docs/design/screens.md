@@ -308,8 +308,9 @@ Show:
 - Resting Heart Rate (with a "?" button)
 - App version, build date, and commit hash when supplied by the build pipeline
 
-Zone colors are unlocked once max HR is set. The settings screen makes this
-visible with a short prompt when max HR is absent.
+These profile fields edit the **default athlete** and **auto-save on blur** —
+there is no Save button. Zone colors are unlocked once max HR is set. The
+settings screen makes this visible with a short prompt when max HR is absent.
 
 ### Advanced
 
@@ -325,3 +326,26 @@ Collapsible/secondary section with developer and power-user options:
 - **Record from multiple devices** — track more than one heart-rate strap in a
   single session; unlocks multi-selection in the picker (see
   [multi-device-recording.md](multi-device-recording.md))
+- **Manage athletes** — opens the athlete-management screen to add, edit, and
+  remove athletes (see [multi-athlete.md](multi-athlete.md))
+
+## Athlete management screen
+
+A tucked-away screen reached from Advanced → Manage athletes. It edits athletes
+**one at a time** (a pager, not a list) using the same name / resting HR / max HR
+form as Settings.
+
+- **Navigation**: previous / next athlete, plus a **＋ create** action that lands
+  on a new blank athlete. A `2 of 3`-style indicator shows the current position.
+- **Auto-save**: fields persist on blur and when navigating between athletes; no
+  Save button.
+- **Delete**: available per athlete, but **disabled when only one athlete
+  remains** (the app requires ≥1). Deleting removes that athlete's HR streams and
+  any workout recorded only from them; a warning dialog names the concrete count
+  (e.g. "12 workouts and all their heart-rate data") and is styled like the
+  restore-database dialog. Shared multi-device sessions keep their other streams.
+  See [multi-athlete.md](multi-athlete.md).
+
+An athlete picker appears elsewhere (activity meta fields for single-stream
+activities, per-device blocks for multi-stream) only when more than one athlete
+exists. See [multi-athlete.md](multi-athlete.md).
