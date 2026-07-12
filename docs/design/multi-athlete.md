@@ -84,17 +84,39 @@ same transaction.
 
 ## Attribution UX (who wore which strap)
 
-- **Single-stream activity (the common case):** a single athlete picker in the
-  activity meta-field cluster
-  ([activity_meta_fields.dart](../../app/lib/features/recording/activity_meta_fields.dart)),
-  shown only when >1 athlete exists. It writes the sole stream's `athlete_id`.
-- **Multi-stream activity:** attribution belongs on the **per-device blocks**
-  (recording + review), where there is already one block per strap. Each block
-  gets an athlete dropdown. "This strap is Dana" lives with the strap, not in the
-  shared activity metadata.
+Athlete attribution is a property of the **stream**, so it is always the **same
+per-stream control**, placed with that stream's identity (**next to the device
+name**). The single-stream case is just the N=1 instance of the multi-stream
+case — the picker does **not** move to a different place or fold into the shared
+activity metadata when a second strap appears. This keeps "this strap is Dana"
+next to the strap in every layout and avoids a jarring relocation between one and
+two streams.
+
+- **The picker is its own athlete dropdown**, not an entry in the activity
+  meta-field cluster
+  ([activity_meta_fields.dart](../../app/lib/features/recording/activity_meta_fields.dart)).
+  It is rendered as its own control near the device name/label and writes that
+  stream's `athlete_id`.
+- **Single-stream:** one picker beside the sole stream's device name. In the
+  recording and review layouts that stream currently has no per-device block
+  (the device name is the screen title / the line is the whole chart), so it
+  gets a lightweight device-name + athlete-picker row in the same relative
+  position the multi-stream blocks occupy.
+- **Multi-stream:** the **per-device blocks** already show one block per strap;
+  each block's header (which shows the device name) gains the same athlete
+  picker.
+- **Shown only when >1 athlete exists.** A solo user never sees a picker on any
+  screen.
+
+Attribution is editable only on the **recording screen**
+([recording_screen.dart](../../app/lib/features/recording/recording_screen.dart))
+and the **activity review screen**
+([activity_screen.dart](../../app/lib/features/activity/activity_screen.dart)).
+
 - **New recordings** stamp every new stream with the **default athlete**; the
-  user re-attributes afterward (or per device on the confirm-record screen, a
-  later refinement).
+  user re-attributes on either of those two screens. The confirm-record screen is
+  intentionally left out of scope — re-attribution there is more than it's worth
+  at this point.
 
 ## Zones become correct per stream
 
