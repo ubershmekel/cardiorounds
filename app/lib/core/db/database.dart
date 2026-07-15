@@ -404,6 +404,14 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// The athlete a single HR stream is attributed to, or null when it is
+  /// unattributed (or the set is gone). Feeds the per-stream attribution picker.
+  Stream<int?> watchStreamAthlete(int setId) {
+    return (select(sampleSets)..where((s) => s.id.equals(setId)))
+        .map((s) => s.athleteId)
+        .watchSingleOrNull();
+  }
+
   /// The athlete an activity is attributed to — its **primary** (lowest-id) HR
   /// set's athlete — or null when that stream is unattributed. See
   /// docs/design/multi-athlete.md.

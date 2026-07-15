@@ -180,6 +180,23 @@ void main() {
       expect(await db.athleteForActivity(started.activityId), isNull);
     });
 
+    test('watchStreamAthlete emits the stream owner and updates on re-attribution', () async {
+      final a = await db.ensureDefaultAthlete();
+      final b = await db.insertAthlete(name: 'Bob');
+      final started = await db.startActivityWithDevices(
+        athleteId: a.id,
+        startedAtMs: 0,
+        deviceIds: [null],
+      );
+      final setId = started.hrSetIds[0];
+
+      expect(await db.watchStreamAthlete(setId).first, a.id);
+      await db.setStreamAthlete(setId: setId, athleteId: b.id);
+      expect(await db.watchStreamAthlete(setId).first, b.id);
+      await db.setStreamAthlete(setId: setId, athleteId: null);
+      expect(await db.watchStreamAthlete(setId).first, isNull);
+    });
+
     group('athleteForActivity (derived owner = primary set)', () {
       test('returns the primary stream owner', () async {
         final a = await db.ensureDefaultAthlete();

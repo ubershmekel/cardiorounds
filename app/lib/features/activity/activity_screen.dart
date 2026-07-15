@@ -6,6 +6,7 @@ import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 import '../../core/zones/zone_times.dart';
 import '../../core/zones/zones.dart';
+import '../athletes/stream_athlete_picker.dart';
 import '../recording/activity_meta_fields.dart';
 import 'activity_duration.dart';
 import 'hr_chart.dart';
@@ -389,6 +390,7 @@ class _ActivityBody extends StatelessWidget {
                 for (var i = 0; i < series.length; i++) ...[
                   _SeriesStatsBlock(
                     color: hrSeriesColor(i),
+                    setId: series[i].setId,
                     name: series[i].deviceName ?? 'Device ${i + 1}',
                     samples: series[i].samples,
                     zoneSetup: zoneSetup,
@@ -406,6 +408,14 @@ class _ActivityBody extends StatelessWidget {
                 const SizedBox(height: 8),
                 _shapeStats(context, thirds, extraBeats),
               ] else ...[
+                // Single-stream attribution sits where the multi blocks would,
+                // so the control doesn't move when a second strap appears. The
+                // row self-hides (with its spacing) unless >1 athlete exists.
+                if (series.isNotEmpty)
+                  StreamAttributionRow(
+                    setId: series.first.setId,
+                    deviceName: series.first.deviceName ?? 'Device 1',
+                  ),
                 if (zoneSetup == null)
                   ZoneLockedPrompt(onTap: onOpenSettings)
                 else
@@ -443,6 +453,7 @@ class _ActivityBody extends StatelessWidget {
 class _SeriesStatsBlock extends StatelessWidget {
   const _SeriesStatsBlock({
     required this.color,
+    required this.setId,
     required this.name,
     required this.samples,
     required this.zoneSetup,
@@ -451,6 +462,7 @@ class _SeriesStatsBlock extends StatelessWidget {
   });
 
   final Color color;
+  final int setId;
   final String name;
   final List<HrSampleRow> samples;
   final ZoneSetup? zoneSetup;
@@ -497,6 +509,11 @@ class _SeriesStatsBlock extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            // Re-attribute this stream. Self-hides unless >1 athlete exists.
+            Align(
+              alignment: Alignment.centerLeft,
+              child: StreamAthletePicker(setId: setId),
             ),
             const SizedBox(height: 12),
             HrStatsRow(stats: stats),

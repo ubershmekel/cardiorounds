@@ -11,6 +11,7 @@ import '../activity/hr_chart.dart';
 import '../activity/hr_stats.dart';
 import '../activity/hr_stats_row.dart';
 import '../activity/zone_breakdown.dart';
+import '../athletes/stream_athlete_picker.dart';
 import 'recording_controller.dart';
 import 'activity_meta_fields.dart';
 
@@ -186,6 +187,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
             _formatElapsed(state.elapsed),
             style: Theme.of(context).textTheme.headlineSmall,
           ),
+        ),
+        // Only renders when >1 athlete exists; lets a coach say whose strap this
+        // single stream is before the multi-device layout would show it inline.
+        StreamAttributionRow(
+          setId: device.setId,
+          deviceName: device.deviceName,
         ),
         if (device.sourceStatus != HrSourceStatusKind.connected)
           Padding(
@@ -400,6 +407,11 @@ class _DeviceBlock extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text('bpm', style: Theme.of(context).textTheme.bodySmall),
               ],
+            ),
+            // Whose strap this is. Self-hides unless >1 athlete exists.
+            Align(
+              alignment: Alignment.centerLeft,
+              child: StreamAthletePicker(setId: device.setId),
             ),
             if (device.sourceStatus != HrSourceStatusKind.connected) ...[
               const SizedBox(height: 12),

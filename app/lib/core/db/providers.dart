@@ -74,6 +74,16 @@ final athleteDeletionImpactProvider = FutureProvider.autoDispose
       return ref.watch(databaseProvider).athleteDeletionImpact(athleteId);
     });
 
+/// The athlete currently attributed to one HR stream (null = unattributed).
+/// Drives the per-stream attribution picker's selected value. autoDispose so it
+/// unsubscribes when the picker leaves the tree.
+final streamAthleteProvider = StreamProvider.autoDispose.family<int?, int>((
+  ref,
+  setId,
+) {
+  return ref.watch(databaseProvider).watchStreamAthlete(setId);
+});
+
 final activitiesProvider = StreamProvider<List<Activity>>((ref) {
   final db = ref.watch(databaseProvider);
   return db.watchActivities();
