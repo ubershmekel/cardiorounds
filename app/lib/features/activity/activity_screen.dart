@@ -295,26 +295,19 @@ class _ActivityBody extends StatelessWidget {
       workoutDurationMs: marker?.durationMs,
     );
 
-    final timedHeartRates = rows.map((r) => (tMs: r.tMs, hr: r.hr));
-    final stats = HrStats.fromTimedHeartRates(
-      timedHeartRates,
-      windowStartMs: workoutStart,
-      windowEndMs: workoutEnd,
-    );
     final chartStats = HrStats.fromHeartRates(rows.map((r) => r.hr));
     final axis = HrAxisRange.forStats(
       minHr: chartStats.min,
       maxHr: chartStats.max,
     );
     final points = rows.map((r) => HrChartPoint(tMs: r.tMs, hr: r.hr)).toList();
-    final zoneTimes = zoneSetup == null
-        ? null
-        : computeZoneTimes(
-            rows,
-            zoneSetup!,
-            windowStartMs: workoutStart,
-            windowEndMs: workoutEnd,
-          );
+
+    // The top overview chart zone-colors the primary stream against its
+    // attributed athlete's zones (falling back to the default athlete). Each
+    // per-stream block below resolves zones the same way via [_zoneSetupForSeries].
+    final primaryZoneSetup = series.isNotEmpty
+        ? _zoneSetupForSeries(series.first)
+        : zoneSetup;
 
     // Multi-device: one line per device, colored by set order, plus per-device
     // stats below. Single-device review is unchanged.
@@ -390,7 +383,7 @@ class _ActivityBody extends StatelessWidget {
                         initialEndMs: workoutEnd,
                         workoutStartMs: workoutStart,
                         workoutEndMs: workoutEnd,
-                        zoneSetup: multi ? null : zoneSetup,
+                        zoneSetup: multi ? null : primaryZoneSetup,
                         activityStartMs: activity.startedAtMs,
                       ),
               ),
@@ -412,52 +405,36 @@ class _ActivityBody extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 16),
-              if (multi) ...[
-                if (zoneSetup == null) ...[
-                  ZoneLockedPrompt(onTap: onOpenSettings),
-                  const SizedBox(height: 16),
-                ],
-                for (var i = 0; i < series.length; i++) ...[
-                  _SeriesStatsBlock(
-                    color: hrSeriesColor(i),
-                    setId: series[i].setId,
-                    name: series[i].deviceName ?? 'Device ${i + 1}',
-                    samples: series[i].samples,
-                    zoneSetup: _zoneSetupForSeries(series[i]),
-                    axis: chartAxis,
-                    fullEndMs: activity.durationMs,
-                    activityStartMs: activity.startedAtMs,
-                    windowStartMs: workoutStart,
-                    windowEndMs: workoutEnd,
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                // Shape and load are single-athlete analysis, so they reflect
-                // the primary (first) device.
+              // One block per HR stream. A solo activity is just the
+              // single-iteration case of this loop, so the two layouts can't
+              // drift apart (the divergence that once left zones locked after
+              // re-attribution). A future location stream is another block
+              // here — present or not — not a parallel layout.
+              for (var i = 0; i < series.length; i++) ...[
+                _StreamStatsBlock(
+                  index: i,
+                  multi: multi,
+                  series: series[i],
+                  zoneSetup: _zoneSetupForSeries(series[i]),
+                  axis: chartAxis,
+                  fullEndMs: activity.durationMs,
+                  activityStartMs: activity.startedAtMs,
+                  windowStartMs: workoutStart,
+                  windowEndMs: workoutEnd,
+                  onOpenSettings: onOpenSettings,
+                ),
+                const SizedBox(height: 16),
+              ],
+              // Shape and load are single-athlete analysis, so they reflect the
+              // primary (first) stream.
+              if (series.isNotEmpty) ...[
                 Text(
-                  'Workout shape · ${series.first.deviceName ?? 'Device 1'}',
+                  multi
+                      ? 'Workout shape · ${series.first.deviceName ?? 'Device 1'}'
+                      : 'Workout shape',
                   style: theme.textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                _shapeStats(context, thirds, extraBeats),
-              ] else ...[
-                // Single-stream attribution sits where the multi blocks would,
-                // so the control doesn't move when a second strap appears. The
-                // row self-hides (with its spacing) unless >1 athlete exists.
-                if (series.isNotEmpty)
-                  StreamAttributionRow(
-                    setId: series.first.setId,
-                    deviceName: series.first.deviceName ?? 'Device 1',
-                  ),
-                if (zoneSetup == null)
-                  ZoneLockedPrompt(onTap: onOpenSettings)
-                else
-                  ZoneBreakdown(setup: zoneSetup!, times: zoneTimes!),
-                const SizedBox(height: 24),
-                Text('Heart rate stats', style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
-                HrStatsRow(stats: stats),
-                const SizedBox(height: 16),
                 _shapeStats(context, thirds, extraBeats),
               ],
               const SizedBox(height: 32),
@@ -480,113 +457,135 @@ class _ActivityBody extends StatelessWidget {
   }
 }
 
-/// One device's review stats in a multi-device activity: a name header with the
-/// device's chart-line color, its own zone-colored HR chart, its min/avg/max over
-/// the workout window, and its time-in-zone breakdown. The chart and breakdown
-/// are scored against [zoneSetup] — this stream's attributed athlete's zones.
-class _SeriesStatsBlock extends StatelessWidget {
-  const _SeriesStatsBlock({
-    required this.color,
-    required this.setId,
-    required this.name,
-    required this.samples,
+/// One HR stream's review: a name header, the attribution picker, its min/avg/max
+/// over the workout window, and its time-in-zone breakdown (or a locked prompt
+/// when its athlete has no zones). Stats and breakdown are scored against
+/// [zoneSetup] — this stream's attributed athlete's zones.
+///
+/// A solo activity renders exactly one of these, so it never diverges from the
+/// multi-stream view. [multi] adds only the comparison chrome the multi view
+/// needs and the solo view doesn't: the color dot, the card wrapper, and this
+/// block's own chart (redundant with the top overview chart when there's one
+/// stream).
+class _StreamStatsBlock extends StatelessWidget {
+  const _StreamStatsBlock({
+    required this.index,
+    required this.multi,
+    required this.series,
     required this.zoneSetup,
     required this.axis,
     required this.fullEndMs,
     required this.activityStartMs,
     required this.windowStartMs,
     required this.windowEndMs,
+    required this.onOpenSettings,
   });
 
-  final Color color;
-  final int setId;
-  final String name;
-  final List<HrSampleRow> samples;
+  final int index;
+  final bool multi;
+  final HrSeries series;
   final ZoneSetup? zoneSetup;
   final HrAxisRange axis;
   final int fullEndMs;
   final int activityStartMs;
   final int? windowStartMs;
   final int? windowEndMs;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = hrSeriesColor(index);
+    final name = series.deviceName ?? 'Device ${index + 1}';
+    final samples = series.samples;
+    final setup = zoneSetup;
+
     final stats = HrStats.fromTimedHeartRates(
       samples.map((r) => (tMs: r.tMs, hr: r.hr)),
       windowStartMs: windowStartMs,
       windowEndMs: windowEndMs,
     );
-    final zoneTimes = zoneSetup == null
+    final zoneTimes = setup == null
         ? null
         : computeZoneTimes(
             samples,
-            zoneSetup!,
+            setup,
             windowStartMs: windowStartMs,
             windowEndMs: windowEndMs,
           );
-    final points = samples
-        .map((r) => HrChartPoint(tMs: r.tMs, hr: r.hr))
-        .toList();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
+            // The chart-line color, only meaningful when there are lines to
+            // tell apart.
+            if (multi) ...[
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(3),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            // Re-attribute this stream. Self-hides unless >1 athlete exists.
-            Align(
-              alignment: Alignment.centerLeft,
-              child: StreamAthletePicker(setId: setId),
-            ),
-            const SizedBox(height: 12),
-            // This stream's own zone-colored line, scored against its athlete's
-            // zones. Falls back to the device's identity color when that athlete
-            // has no zones set. lineColor also tints signal-gap breaks.
-            SizedBox(
-              height: 180,
-              child: ZoomableHrChart(
-                points: points,
-                axis: axis,
-                fullStartMs: 0,
-                fullEndMs: fullEndMs,
-                initialStartMs: windowStartMs,
-                initialEndMs: windowEndMs,
-                workoutStartMs: windowStartMs,
-                workoutEndMs: windowEndMs,
-                lineColor: color,
-                zoneSetup: zoneSetup,
-                activityStartMs: activityStartMs,
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                name,
+                style: theme.textTheme.titleMedium,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(height: 12),
-            HrStatsRow(stats: stats),
-            if (zoneSetup != null) ...[
-              const SizedBox(height: 16),
-              ZoneBreakdown(setup: zoneSetup!, times: zoneTimes!),
-            ],
           ],
         ),
-      ),
+        // Re-attribute this stream. Self-hides unless >1 athlete exists.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: StreamAthletePicker(setId: series.setId),
+        ),
+        // A solo stream is already drawn by the top overview chart; only the
+        // multi-stream comparison view needs a per-stream chart here. The line
+        // is zone-colored, falling back to the device color; lineColor also
+        // tints signal-gap breaks.
+        if (multi) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 180,
+            child: ZoomableHrChart(
+              points: [
+                for (final r in samples) HrChartPoint(tMs: r.tMs, hr: r.hr),
+              ],
+              axis: axis,
+              fullStartMs: 0,
+              fullEndMs: fullEndMs,
+              initialStartMs: windowStartMs,
+              initialEndMs: windowEndMs,
+              workoutStartMs: windowStartMs,
+              workoutEndMs: windowEndMs,
+              lineColor: color,
+              zoneSetup: setup,
+              activityStartMs: activityStartMs,
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        HrStatsRow(stats: stats),
+        const SizedBox(height: 16),
+        if (setup == null)
+          ZoneLockedPrompt(onTap: onOpenSettings)
+        else
+          ZoneBreakdown(setup: setup, times: zoneTimes!),
+      ],
+    );
+
+    // The card visually groups a stream against its neighbors; a solo stream has
+    // no neighbors, so it reads cleaner flat.
+    if (!multi) return content;
+    return Card(
+      child: Padding(padding: const EdgeInsets.all(16), child: content),
     );
   }
 }
