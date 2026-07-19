@@ -159,10 +159,10 @@ generate per-person markers.
 
 ### Settings storage
 
-`max_heartrate` and `resting_heartrate` are stored on the `athletes` row. The app
-is single-athlete by default (one implicit athlete created on first launch), and
-the DB was always designed for multiple athletes. The tucked-away multi-athlete
-UI (Advanced → Manage athletes) surfaces the extra rows; see
+`max_heartrate` and `resting_heartrate` are stored on the `athletes` row. The
+app is single-athlete by default (one implicit athlete created on first launch),
+and the DB was always designed for multiple athletes. The tucked-away
+multi-athlete UI (Advanced → Manage athletes) surfaces the extra rows; see
 [multi-athlete.md](multi-athlete.md). The app guarantees **≥1 athlete always
 exists** — `watchDefaultAthlete()` reads the lowest-`id` row as the default, and
 deleting the last athlete is not offered.
@@ -229,8 +229,8 @@ SET athlete_id = (SELECT a.athlete_id FROM activities a WHERE a.id = activity_id
 Dropping `activities.athlete_id` is a table rebuild (SQLite can't drop a column
 in place on older engines). Run the whole migration with foreign keys disabled
 inside an exclusive block, `PRAGMA foreign_key_check` before re-enabling, and
-cover it with a migration test from a real v2 schema fixture — same discipline as
-v1 → v2. See [multi-athlete.md](multi-athlete.md).
+cover it with a migration test from a real v2 schema fixture — same discipline
+as v1 → v2. See [multi-athlete.md](multi-athlete.md).
 
 ## Files
 
