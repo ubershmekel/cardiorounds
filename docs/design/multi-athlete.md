@@ -164,8 +164,8 @@ never "whichever athlete is default or first valid". The shape thirds are
 profile-free and always render. Any shape/load value that _does_ need a profile
 uses the reference stream's **attributed athlete**; if that stream is
 unattributed or its profile is incomplete, the shape renders **without** those
-values instead of falling back to the default athlete. `watchHrSeries` omits
-no sets: it retains empty sets so device order, including the primary reference
+values instead of falling back to the default athlete. `watchHrSeries` omits no
+sets: it retains empty sets so device order, including the primary reference
 stream, remains stable even when a strap never produced a sample.
 
 > Follow-up: `shape_start/mid/end` are stored on the activity and computed from
