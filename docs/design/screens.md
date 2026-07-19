@@ -345,20 +345,37 @@ settings screen makes this visible with a short prompt when max HR is absent.
 
 ### Advanced
 
-Collapsible/secondary section with developer and power-user options:
+Secondary controls use full-width rows shaped like the settings toggles: icon,
+title, short explanatory subtitle, and either a switch or action affordance.
+Action rows carry a trailing chevron only when they open another screen, so the
+chevron consistently means "navigate". Groups are introduced by a tinted section
+band and ordered so developer/support features stay at the bottom:
 
-- **Source on GitHub** - opens the repo in a browser
+Directly below the profile fields (no band), **Manage athletes** opens the
+athlete-management screen to add, edit, and remove athletes (see
+[multi-athlete.md](multi-athlete.md)); it's the one navigation row, so it shows
+a chevron.
+
+**Backup**
+
 - **Export database** - downloads a backup file of the current database
 - **Restore from database** - replaces the current database with a user-selected
   backup file
-- **Export logs** - downloads a log file to share with the devs
-- **Fake heart-rate device** — offer a simulated strap when starting a
-  recording, for testing without hardware
+
+**Advanced**
+
 - **Record from multiple devices** — track more than one heart-rate strap in a
   single session; unlocks multi-selection in the picker (see
   [multi-device-recording.md](multi-device-recording.md))
-- **Manage athletes** — opens the athlete-management screen to add, edit, and
-  remove athletes (see [multi-athlete.md](multi-athlete.md))
+- **Fake heart-rate device** — offer a simulated strap when starting a
+  recording, for testing without hardware
+- **Export logs** - downloads a log file to share with the devs
+
+**About**
+
+- **App version** - shows the current build label
+- **Source on GitHub** - opens the repo in a browser so users can file feedback
+  as an issue, inspect the code, or propose a change
 
 ## Athlete management screen
 

@@ -61,80 +61,76 @@ class _SettingsForm extends ConsumerWidget {
         // pager (Advanced → Manage athletes).
         AthleteProfileFields(athlete: athlete),
         const SizedBox(height: 32),
+        const Divider(),
+        _SettingsActionTile(
+          icon: Icons.people_alt_outlined,
+          title: 'Manage athletes',
+          subtitle: 'Add people and edit their heart-rate zones.',
+          // The only tile that opens a sub-screen, so it's the only one that
+          // earns a navigation chevron.
+          navigates: true,
+          onTap: () => context.push('/settings/athletes'),
+        ),
+        const _SettingsSectionTitle('Backup'),
+        _SettingsActionTile(
+          icon: Icons.download_outlined,
+          title: 'Export database',
+          subtitle: 'Save a full backup of workouts, athletes, and settings.',
+          onTap: () => shareSupportFile(
+            context,
+            getFile: AppDatabase.databaseFile,
+            subject: 'Cardio Rounds database',
+          ),
+        ),
+        _SettingsActionTile(
+          icon: Icons.upload_outlined,
+          title: 'Restore from database',
+          subtitle: 'Replace this device\'s data with a saved backup file.',
+          onTap: () => _restoreDatabase(context, ref),
+        ),
+        const _SettingsSectionTitle('Advanced'),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.groups_outlined),
+          title: const Text('Record from multiple devices'),
+          subtitle: const Text(
+            'Select several heart-rate straps for the same session.',
+          ),
+          value: ref.watch(multiDeviceRecordingEnabledProvider),
+          onChanged: (enabled) => ref
+              .read(multiDeviceRecordingEnabledProvider.notifier)
+              .set(enabled),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.bug_report_outlined),
+          title: const Text('Fake heart-rate device'),
+          subtitle: const Text(
+            'Use a simulated strap to test recording without hardware.',
+          ),
+          value: ref.watch(fakeHrDeviceEnabledProvider),
+          onChanged: (enabled) =>
+              ref.read(fakeHrDeviceEnabledProvider.notifier).set(enabled),
+        ),
+        _SettingsActionTile(
+          icon: Icons.article_outlined,
+          title: 'Export logs',
+          subtitle: 'Share troubleshooting details after a recording problem.',
+          onTap: () => exportSupportLogs(context),
+        ),
+        const _SettingsSectionTitle('About'),
         ListTile(
           contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.info_outline),
           title: const Text('App version'),
           subtitle: Text(appBuildLabel()),
         ),
-        ...[
-          const SizedBox(height: 32),
-          const Divider(),
-          const SizedBox(height: 8),
-          Text(
-            'Advanced',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.open_in_new),
-            label: const Text('Source on GitHub'),
-            onPressed: () => _openSourceCode(context),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.download_outlined),
-            label: const Text('Export database'),
-            onPressed: () => shareSupportFile(
-              context,
-              getFile: AppDatabase.databaseFile,
-              subject: 'Cardio Rounds database',
-            ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.upload_outlined),
-            label: const Text('Restore from database'),
-            onPressed: () => _restoreDatabase(context, ref),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.people_alt_outlined),
-            label: const Text('Manage athletes'),
-            onPressed: () => context.push('/settings/athletes'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.article_outlined),
-            label: const Text('Export logs'),
-            onPressed: () => exportSupportLogs(context),
-          ),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.bug_report_outlined),
-            title: const Text('Fake heart-rate device'),
-            subtitle: const Text(
-              'Offer a simulated strap when starting a recording for testing the app.',
-            ),
-            value: ref.watch(fakeHrDeviceEnabledProvider),
-            onChanged: (enabled) =>
-                ref.read(fakeHrDeviceEnabledProvider.notifier).set(enabled),
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.groups_outlined),
-            title: const Text('Record from multiple devices'),
-            subtitle: const Text(
-              'Track more than one heart-rate strap in a single session.',
-            ),
-            value: ref.watch(multiDeviceRecordingEnabledProvider),
-            onChanged: (enabled) => ref
-                .read(multiDeviceRecordingEnabledProvider.notifier)
-                .set(enabled),
-          ),
-        ],
+        _SettingsActionTile(
+          icon: Icons.open_in_new,
+          title: 'Source on GitHub',
+          subtitle: 'File feedback as an issue, or change the code.',
+          onTap: () => _openSourceCode(context),
+        ),
       ],
     );
   }
@@ -219,6 +215,67 @@ class _SettingsForm extends ConsumerWidget {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Could not open GitHub source')),
+    );
+  }
+}
+
+class _SettingsSectionTitle extends StatelessWidget {
+  const _SettingsSectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      // Spacing lives here so section headers self-separate; call sites don't
+      // sprinkle SizedBoxes around them.
+      margin: const EdgeInsets.only(top: 24, bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsActionTile extends StatelessWidget {
+  const _SettingsActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.navigates = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  /// Whether tapping opens another screen. Only navigation tiles show the
+  /// trailing chevron; action tiles (export, restore, open a link) don't, so
+  /// the chevron keeps meaning "go to a sub-page".
+  final bool navigates;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: navigates ? const Icon(Icons.chevron_right) : null,
+      onTap: onTap,
     );
   }
 }
