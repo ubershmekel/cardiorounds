@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/app_logger.dart';
 import '../../core/db/database.dart';
 import '../../core/db/providers.dart';
 
@@ -31,6 +32,16 @@ class _AthleteProfileFieldsState extends ConsumerState<AthleteProfileFields> {
   // picked up.
   late AppDatabase _db;
 
+  // The values currently in the DB for the athlete these fields are seeded from.
+  // _persist compares against these and skips the write when nothing changed.
+  // Without this guard, dispose/didUpdateWidget write on *every* unmount, and
+  // because a write re-fires the athletes query stream (which rebuilds this
+  // subtree and unmounts the fields again), the app spins in a write→rebuild→
+  // write loop that also corrupts the row with stale controller text.
+  late String _savedName;
+  int? _savedMaxHr;
+  int? _savedRestingHr;
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +53,7 @@ class _AthleteProfileFieldsState extends ConsumerState<AthleteProfileFields> {
     _restingHrController = TextEditingController(
       text: widget.athlete.restingHeartrate?.toString() ?? '',
     );
+    _seedSavedFrom(widget.athlete);
     // Save to the row when the user taps away from any field (hasFocus → false).
     for (final focus in [_nameFocus, _maxHrFocus, _restingHrFocus]) {
       focus.addListener(() {
@@ -62,7 +74,15 @@ class _AthleteProfileFieldsState extends ConsumerState<AthleteProfileFields> {
       _maxHrController.text = widget.athlete.maxHeartrate?.toString() ?? '';
       _restingHrController.text =
           widget.athlete.restingHeartrate?.toString() ?? '';
+      _seedSavedFrom(widget.athlete);
     }
+  }
+
+  /// Snapshot the row's stored values so [_persist] can detect a genuine edit.
+  void _seedSavedFrom(Athlete athlete) {
+    _savedName = athlete.name.trim();
+    _savedMaxHr = athlete.maxHeartrate;
+    _savedRestingHr = athlete.restingHeartrate;
   }
 
   @override
@@ -80,24 +100,46 @@ class _AthleteProfileFieldsState extends ConsumerState<AthleteProfileFields> {
   }
 
   void _persist(int athleteId) {
+    final name = _nameController.text.trim();
     final maxText = _maxHrController.text.trim();
     final restingText = _restingHrController.text.trim();
     // A swapped max<=resting pair would lock zones while looking saved. Leave the
     // HR columns untouched (keeping the last valid values) until the pair is
     // fixed, but still save the name. The warning row prompts the correction.
     final swapped = _isHRSwapped;
+    final newMax = swapped ? null : (maxText.isEmpty ? null : int.tryParse(maxText));
+    final newResting =
+        swapped ? null : (restingText.isEmpty ? null : int.tryParse(restingText));
+
+    // Skip no-op writes. dispose/didUpdateWidget call _persist on every unmount,
+    // and a write re-fires the athletes query stream — which rebuilds and
+    // unmounts these fields again. Writing only on a real change is what keeps
+    // that from becoming an endless write→rebuild→write loop.
+    final nameChanged = name != _savedName;
+    final hrChanged = !swapped &&
+        (newMax != _savedMaxHr || newResting != _savedRestingHr);
+    if (!nameChanged && !hrChanged) return;
+
+    // Saves are user-driven and rare, so one line each is cheap. A *burst* of
+    // these is the fingerprint of the write→rebuild→write loop this guard exists
+    // to prevent (see docs/design/app-building-strategy.md) — if it ever
+    // regresses, the log makes it obvious instead of just flickering the UI.
+    appLog('Athlete', 'saved id=$athleteId (name=$nameChanged hr=$hrChanged)');
+
     _db.updateAthlete(
-          id: athleteId,
-          name: _nameController.text.trim(),
-          maxHeartrate: swapped
-              ? null
-              : (maxText.isEmpty ? null : int.tryParse(maxText)),
-          clearMax: swapped ? false : maxText.isEmpty,
-          restingHeartrate: swapped
-              ? null
-              : (restingText.isEmpty ? null : int.tryParse(restingText)),
-          clearResting: swapped ? false : restingText.isEmpty,
-        );
+      id: athleteId,
+      name: name,
+      maxHeartrate: newMax,
+      clearMax: swapped ? false : maxText.isEmpty,
+      restingHeartrate: newResting,
+      clearResting: swapped ? false : restingText.isEmpty,
+    );
+
+    _savedName = name;
+    if (!swapped) {
+      _savedMaxHr = newMax;
+      _savedRestingHr = newResting;
+    }
   }
 
   bool get _isHRSwapped {

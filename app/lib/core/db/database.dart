@@ -31,12 +31,17 @@ class HrSeries {
     required this.setId,
     required this.deviceId,
     required this.deviceName,
+    required this.athleteId,
     required this.samples,
   });
 
   final int setId;
   final int? deviceId;
   final String? deviceName;
+
+  /// The athlete this stream is attributed to, or null when unattributed. Lets
+  /// the review screen score each stream against its own athlete's zones.
+  final int? athleteId;
   final List<HrSampleRow> samples;
 }
 
@@ -565,6 +570,7 @@ class AppDatabase extends _$AppDatabase {
             setId: set.id,
             deviceId: set.deviceId,
             deviceName: row.readTableOrNull(devices)?.name,
+            athleteId: set.athleteId,
             samples: [],
           );
         });

@@ -94,15 +94,42 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     context.go('/activity/$activityId');
   }
 
+  /// Every athlete, kept from the last non-empty emission so per-stream zones
+  /// stay put across a transient loading/empty emission (e.g. a db swap on
+  /// restore) instead of blinking to null. The lowest-id entry is the default
+  /// athlete used as the fallback owner.
+  List<Athlete> _athletes = const [];
+
+  /// Zones for one HR stream: its attributed athlete's, falling back to the
+  /// default (lowest-id) athlete's when the stream is unattributed or its
+  /// athlete is gone. Mirrors the activity review screen so re-attributing a
+  /// strap mid-recording updates its zones (and clears them when that athlete
+  /// has no max HR). See docs/design/multi-athlete.md.
+  ZoneSetup? _zoneSetupForSet(int setId) {
+    final athleteId = ref.watch(streamAthleteProvider(setId)).valueOrNull;
+    Athlete? owner = _athletes.isEmpty ? null : _athletes.first; // default owner
+    if (athleteId != null) {
+      for (final a in _athletes) {
+        if (a.id == athleteId) {
+          owner = a;
+          break;
+        }
+      }
+    }
+    return zoneSetupFor(
+      maxHr: owner?.maxHeartrate,
+      restingHr: owner?.restingHeartrate,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final activityId = widget.activityId;
     final state = ref.watch(recordingControllerProvider(activityId));
-    final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
-    final zoneSetup = zoneSetupFor(
-      maxHr: athlete?.maxHeartrate,
-      restingHr: athlete?.restingHeartrate,
-    );
+    final liveAthletes = ref.watch(athletesProvider).valueOrNull;
+    if (liveAthletes != null && liveAthletes.isNotEmpty) {
+      _athletes = liveAthletes;
+    }
     final multi = state.devices.length > 1;
 
     return Scaffold(
@@ -123,8 +150,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: multi
-                      ? _buildMulti(context, state, zoneSetup, chartHeight)
-                      : _buildSingle(context, state, zoneSetup, chartHeight),
+                      ? _buildMulti(context, state, chartHeight)
+                      : _buildSingle(context, state, chartHeight),
                 ),
               ),
             ),
@@ -139,11 +166,11 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   Widget _buildSingle(
     BuildContext context,
     RecordingState state,
-    ZoneSetup? zoneSetup,
     double chartHeight,
   ) {
     final activityId = widget.activityId;
     final device = state.primary;
+    final zoneSetup = _zoneSetupForSet(device.setId);
     final samples = ref.watch(samplesProvider(activityId)).valueOrNull ?? [];
     final scheme = Theme.of(context).colorScheme;
     final bpmText = device.currentBpm?.toString() ?? '--';
@@ -240,7 +267,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   Widget _buildMulti(
     BuildContext context,
     RecordingState state,
-    ZoneSetup? zoneSetup,
     double chartHeight,
   ) {
     final activityId = widget.activityId;
@@ -288,7 +314,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
             color: colorForSet[device.setId]!,
             device: device,
             samples: samplesBySet[device.setId] ?? const [],
-            zoneSetup: zoneSetup,
+            zoneSetup: _zoneSetupForSet(device.setId),
             now: state.now,
             signalTitle: _signalTitle(device),
             signalSubtitle: _signalSubtitle(device, state.now),

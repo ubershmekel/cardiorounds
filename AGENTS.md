@@ -35,6 +35,16 @@
   upload to App Store Connect automatically — no need to run `flutter build ipa`
   or upload manually.
 
+## Debugging: test theories with logs, don't trust comments
+
+- **When you have a theory about a bug, try to confirm or deny it before acting
+  on it.** You can add a log for that. A wrong theory that looks plausible will
+  send you building fixes for a problem that doesn't exist. A cheap `appLog` at
+  the suspected source (with a sequence counter, timing, and — for "who called
+  this?" questions — `StackTrace.current`) turns a guess into a fact in one run.
+- **Existing code comments are theories too, not evidence.** Verify before you
+  rely on them.
+
 ## Logging
 
 - App logging is centralized in `app/lib/core/app_logger.dart`; use

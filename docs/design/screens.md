@@ -218,8 +218,11 @@ by a **per-device block** for each strap: a color swatch (matching that device's
 chart line), the device name, its current BPM in zone color, its connection
 status, and its **own** min/avg/max and time-in-zone breakdown. Below the blocks
 is a single shared chart drawing **one line per device** (see Chart spec); the
-per-device blocks double as the chart legend. Each device's time-in-zone is
-scored against the single athlete's zones (see
+per-device blocks double as the chart legend. Each device's current-BPM zone
+color and time-in-zone are scored against **that stream's attributed athlete's
+zones** (the default athlete when unattributed), so re-attributing a strap
+mid-recording updates its zones — and clears them if that athlete has no max HR
+(see [multi-athlete.md](multi-athlete.md) and
 [multi-device-recording.md](multi-device-recording.md)).
 
 ### Bluetooth disconnect during recording
@@ -250,12 +253,17 @@ at `/activity/:activityId`.
 - Activity name (editable inline)
 - In-depth analysis and advice (Milestone 3+)
 
-For a multiple-device activity the chart draws one line per device with a legend
-(color swatch + device name), and **each device** gets its own min/avg/max and
-time-in-zone breakdown (per-device blocks, scored against the single athlete's
-zones). The workout shape and load score are still shown, computed from the
-**primary** device and labelled with its name. See
-[multi-device-recording.md](multi-device-recording.md).
+For a multiple-device activity a **joint comparison chart** at the top draws one
+line per device with a legend (color swatch + device name) for at-a-glance
+comparison. Below it **each device** gets its own **per-device block**: its own
+zone-colored HR chart (a full pan/pinch/tap `ZoomableHrChart`, same as the
+single-device view), min/avg/max, and time-in-zone breakdown. Each device's chart
+and breakdown are scored against **that stream's own athlete's zones** (the
+athlete the strap is attributed to; the default athlete when unattributed) — so a
+shared session with two people shows each person against their own max/resting HR.
+See [multi-athlete.md](multi-athlete.md). The workout shape and load score are
+still shown once, computed from the **primary** device and labelled with its name.
+See [multi-device-recording.md](multi-device-recording.md).
 
 ### Marker editing
 
@@ -278,9 +286,11 @@ converts it to a human marker.
 - **Grid**: subtle horizontal guide lines every 10 bpm, with sparse Y-axis
   labels so the line remains visually dominant
 - **Line**: continuous, colored by zone (see zones.md); breaks at NULL HR gaps.
-  With multiple devices the chart draws one line per device, each in a stable
-  per-device palette color instead of zone color (see
-  [multi-device-recording.md](multi-device-recording.md))
+  With multiple devices the **joint comparison chart** draws one line per device,
+  each in a stable per-device palette color instead of zone color (see
+  [multi-device-recording.md](multi-device-recording.md)); the **per-device
+  charts** below it are each zone-colored against that stream's athlete's zones
+  (see [multi-athlete.md](multi-athlete.md))
 - **Tap inspection** with multiple devices shows the shared timestamp plus one
   BPM value per device, each tinted in its line color, with a dot on each line
 - **Tap inspection**: tapping the plot shows a vertical line at that timestamp

@@ -125,8 +125,12 @@ max/resting HR — exact for one person wearing two sensors, only approximate wh
 the straps are different people (see
 [multi-device-recording.md](multi-device-recording.md)). Once each stream carries
 its own `athlete_id`, **each per-device block scores against that person's
-zones**. Activity-level shape and load score still come from the primary set and
-its athlete.
+zones** — both the block's **zone-colored chart** and its time-in-zone breakdown
+use that stream's athlete's max/resting HR. An **unattributed** stream falls back
+to the default athlete's zones. Resolving a stream's zones therefore needs its
+`athlete_id`, so `watchHrSeries` exposes `athlete_id` on each `HrSeries`.
+Activity-level shape and load score still come from the primary set and its
+athlete.
 
 > Follow-up: `shape_start/mid/end` and the load score are stored on the activity
 > and computed from the primary set. If the primary stream is later deleted (a

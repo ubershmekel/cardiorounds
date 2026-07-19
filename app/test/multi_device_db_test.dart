@@ -50,10 +50,18 @@ void main() {
       expect(series, hasLength(2));
       expect(series[0].setId, set1);
       expect(series[0].deviceName, 'Polar');
+      expect(series[0].athleteId, athlete.id);
       expect(series[0].samples.map((r) => r.hr), [100, 110]);
       expect(series[1].setId, set2);
       expect(series[1].deviceName, isNull); // fake source, no device
+      expect(series[1].athleteId, athlete.id);
       expect(series[1].samples.map((r) => r.hr), [90]);
+
+      // Re-attributing a stream surfaces on its series (per-stream zones).
+      final other = await db.insertAthlete(name: 'Sam');
+      await db.setStreamAthlete(setId: set2, athleteId: other.id);
+      final reattributed = await db.watchHrSeries(started.activityId).first;
+      expect(reattributed[1].athleteId, other.id);
     });
 
     test('watchHrSeries omits sets that have no samples yet', () async {

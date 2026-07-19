@@ -36,6 +36,10 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         ref.watch(hrSeriesProvider(widget.activityId)).valueOrNull ?? const [];
     final marker = ref.watch(workoutMarkerProvider(widget.activityId));
     final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
+    // All athletes, so each HR stream can be scored against its own athlete's
+    // zones (a shared multi-device session may hold several people's straps).
+    final athletes =
+        ref.watch(athletesProvider).valueOrNull ?? const <Athlete>[];
     final zoneSetup = zoneSetupFor(
       maxHr: athlete?.maxHeartrate,
       restingHr: athlete?.restingHeartrate,
@@ -71,6 +75,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             workoutMarker: marker.valueOrNull,
             editing: _editing,
             zoneSetup: zoneSetup,
+            athletes: athletes,
             restingHr: athlete?.restingHeartrate,
             onOpenSettings: () => context.go('/settings'),
             onWorkoutChanged: (start, end) async {
@@ -122,6 +127,7 @@ class _ActivityBody extends StatelessWidget {
     required this.workoutMarker,
     required this.editing,
     required this.zoneSetup,
+    required this.athletes,
     this.restingHr,
     required this.onOpenSettings,
     required this.onWorkoutChanged,
@@ -137,11 +143,35 @@ class _ActivityBody extends StatelessWidget {
   final List<HrSeries> series;
   final Marker? workoutMarker;
   final bool editing;
+
+  /// The default athlete's zones. Used for the single-stream view and as the
+  /// fallback for any stream that isn't attributed to a specific athlete.
   final ZoneSetup? zoneSetup;
+
+  /// Every athlete, so each stream can be scored against its own attributed
+  /// athlete's zones. See [_zoneSetupForSeries].
+  final List<Athlete> athletes;
   final int? restingHr;
   final VoidCallback onOpenSettings;
   final void Function(int startMs, int endMs) onWorkoutChanged;
   final VoidCallback onDelete;
+
+  /// The zones a single stream should be scored against: its attributed
+  /// athlete's, falling back to the default athlete's ([zoneSetup]) when the
+  /// stream is unattributed or that athlete is gone.
+  ZoneSetup? _zoneSetupForSeries(HrSeries s) {
+    final id = s.athleteId;
+    if (id == null) return zoneSetup;
+    for (final a in athletes) {
+      if (a.id == id) {
+        return zoneSetupFor(
+          maxHr: a.maxHeartrate,
+          restingHr: a.restingHeartrate,
+        );
+      }
+    }
+    return zoneSetup;
+  }
 
   String _formatDuration(int ms) {
     final totalSec = ms ~/ 1000;
@@ -393,7 +423,10 @@ class _ActivityBody extends StatelessWidget {
                     setId: series[i].setId,
                     name: series[i].deviceName ?? 'Device ${i + 1}',
                     samples: series[i].samples,
-                    zoneSetup: zoneSetup,
+                    zoneSetup: _zoneSetupForSeries(series[i]),
+                    axis: chartAxis,
+                    fullEndMs: activity.durationMs,
+                    activityStartMs: activity.startedAtMs,
                     windowStartMs: workoutStart,
                     windowEndMs: workoutEnd,
                   ),
@@ -448,8 +481,9 @@ class _ActivityBody extends StatelessWidget {
 }
 
 /// One device's review stats in a multi-device activity: a name header with the
-/// device's chart-line color, its min/avg/max over the workout window, and its
-/// time-in-zone breakdown (scored against the single athlete's zones).
+/// device's chart-line color, its own zone-colored HR chart, its min/avg/max over
+/// the workout window, and its time-in-zone breakdown. The chart and breakdown
+/// are scored against [zoneSetup] — this stream's attributed athlete's zones.
 class _SeriesStatsBlock extends StatelessWidget {
   const _SeriesStatsBlock({
     required this.color,
@@ -457,6 +491,9 @@ class _SeriesStatsBlock extends StatelessWidget {
     required this.name,
     required this.samples,
     required this.zoneSetup,
+    required this.axis,
+    required this.fullEndMs,
+    required this.activityStartMs,
     required this.windowStartMs,
     required this.windowEndMs,
   });
@@ -466,6 +503,9 @@ class _SeriesStatsBlock extends StatelessWidget {
   final String name;
   final List<HrSampleRow> samples;
   final ZoneSetup? zoneSetup;
+  final HrAxisRange axis;
+  final int fullEndMs;
+  final int activityStartMs;
   final int? windowStartMs;
   final int? windowEndMs;
 
@@ -484,6 +524,9 @@ class _SeriesStatsBlock extends StatelessWidget {
             windowStartMs: windowStartMs,
             windowEndMs: windowEndMs,
           );
+    final points = samples
+        .map((r) => HrChartPoint(tMs: r.tMs, hr: r.hr))
+        .toList();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -514,6 +557,26 @@ class _SeriesStatsBlock extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: StreamAthletePicker(setId: setId),
+            ),
+            const SizedBox(height: 12),
+            // This stream's own zone-colored line, scored against its athlete's
+            // zones. Falls back to the device's identity color when that athlete
+            // has no zones set. lineColor also tints signal-gap breaks.
+            SizedBox(
+              height: 180,
+              child: ZoomableHrChart(
+                points: points,
+                axis: axis,
+                fullStartMs: 0,
+                fullEndMs: fullEndMs,
+                initialStartMs: windowStartMs,
+                initialEndMs: windowEndMs,
+                workoutStartMs: windowStartMs,
+                workoutEndMs: windowEndMs,
+                lineColor: color,
+                zoneSetup: zoneSetup,
+                activityStartMs: activityStartMs,
+              ),
             ),
             const SizedBox(height: 12),
             HrStatsRow(stats: stats),

@@ -99,6 +99,38 @@ autocomplete dropdown), extract one widget (`SportTypeOptions`) and reuse it.
 Re-rolling the same overlay inline on each screen drifts in look and behavior
 over time.
 
+### Beware the write→rebuild→write loop with Drift streams
+
+Drift reruns a watched query on **any** write to a table it reads — and
+invalidation is heuristic, so it can rerun even when the row didn't meaningfully
+change. So a widget that both watches that data (via Riverpod) and **writes to it
+unconditionally on `dispose`/`didUpdateWidget`** creates a loop: write → stream
+re-emits → tree rebuilds → editor unmounts → `dispose` writes again, at frame
+rate. It's nearly silent (just UI flicker) and can corrupt the row with whatever
+stale text the controllers held. We hit exactly this with athlete profile fields
+auto-saving on dispose.
+
+Treat the stream as a **read-only DB snapshot, not the editable state.** Keep a
+local draft and write only when it's genuinely dirty:
+
+- **Don't save primarily from `dispose`.** Save on focus loss / `onTapOutside` /
+  `onEditingComplete` / a debounce / `PopScope`. `dispose` is a last-resort
+  fire-and-forget fallback only, and must never write unconditionally.
+- **Make the write conditional / idempotent** — skip when the draft equals the
+  accepted baseline. A second barrier at the DAO helps: `..where(col.isNotValue(
+  next))` turns a stale save into a zero-row no-op.
+- **A stream emission must not clobber a dirty draft.** Accept an incoming value
+  only when clean (or when it matches what you just saved — the acknowledgement).
+- **Guard controller-listener feedback:** programmatically setting a
+  `TextEditingController` notifies its listeners, which can re-mark the field
+  dirty. Wrap such updates in an "applying DB value" flag.
+- **Key editors on row *identity*, not contents.** `ValueKey(row.contents)` or
+  `UniqueKey()` re-create the editor on every emission, forcing the dispose-save.
+
+See `AthleteProfileFields._persist` for the snapshot-and-early-return pattern.
+The healthy cycle is `edit → dirty → save → stream emits → editor accepts the
+ack → clean`, never `stream emits → rebuild/dispose → unconditional save → …`.
+
 ---
 
 ## Repo Layout
