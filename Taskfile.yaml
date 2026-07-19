@@ -60,7 +60,12 @@ tasks:
     cmds:
       - dart format app
       - npx prettier --write .
-  hooks:install:
+  format-check:
+    desc: Check Dart and Prettier-supported project file formatting
+    cmds:
+      - dart format --set-exit-if-changed app
+      - npx prettier --check .
+  hooks-install:
     desc: Configure Git to use the repo's shared hooks
     cmds:
       - git config core.hooksPath .githooks

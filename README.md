@@ -22,8 +22,8 @@ designed for treadmill running, interval training and BJJ rounds.
 Install the shared Git hooks once per clone:
 
 ```sh
-task hooks:install
+task hooks-install
 ```
 
-The pre-commit hook runs `task format` and includes formatter changes for files
-that were already staged.
+The pre-commit hook runs `task format-check` and fails when files need
+formatting. Run `task format` to apply formatter changes.
