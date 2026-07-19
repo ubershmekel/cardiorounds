@@ -9,6 +9,7 @@ import '../../core/zones/zones.dart';
 import '../athletes/stream_athlete_picker.dart';
 import '../recording/activity_meta_fields.dart';
 import 'activity_duration.dart';
+import 'activity_metrics.dart';
 import 'hr_chart.dart';
 import 'hr_stats.dart';
 import 'hr_stats_row.dart';
@@ -35,15 +36,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     final series =
         ref.watch(hrSeriesProvider(widget.activityId)).valueOrNull ?? const [];
     final marker = ref.watch(workoutMarkerProvider(widget.activityId));
-    final athlete = ref.watch(defaultAthleteProvider).valueOrNull;
-    // All athletes, so each HR stream can be scored against its own athlete's
-    // zones (a shared multi-device session may hold several people's straps).
+    // Every athlete, so each HR stream is scored against its own attributed
+    // athlete's zones. The default athlete is deliberately *not* read here: it's
+    // Home's viewing context, not an Activity-analysis input, so an activity
+    // scores correctly even when no stream belongs to the default athlete.
     final athletes =
         ref.watch(athletesProvider).valueOrNull ?? const <Athlete>[];
-    final zoneSetup = zoneSetupFor(
-      maxHr: athlete?.maxHeartrate,
-      restingHr: athlete?.restingHeartrate,
-    );
 
     return Scaffold(
       appBar: AppBar(
@@ -74,10 +72,9 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             series: series,
             workoutMarker: marker.valueOrNull,
             editing: _editing,
-            zoneSetup: zoneSetup,
             athletes: athletes,
-            restingHr: athlete?.restingHeartrate,
-            onOpenSettings: () => context.go('/settings'),
+            onOpenAthleteProfile: (athleteId) =>
+                context.go('/settings/athletes?athleteId=$athleteId'),
             onWorkoutChanged: (start, end) async {
               final db = ref.read(databaseProvider);
               await db.upsertWorkoutMarker(
@@ -126,10 +123,8 @@ class _ActivityBody extends StatelessWidget {
     required this.series,
     required this.workoutMarker,
     required this.editing,
-    required this.zoneSetup,
     required this.athletes,
-    this.restingHr,
-    required this.onOpenSettings,
+    required this.onOpenAthleteProfile,
     required this.onWorkoutChanged,
     required this.onDelete,
   });
@@ -144,34 +139,13 @@ class _ActivityBody extends StatelessWidget {
   final Marker? workoutMarker;
   final bool editing;
 
-  /// The default athlete's zones. Used for the single-stream view and as the
-  /// fallback for any stream that isn't attributed to a specific athlete.
-  final ZoneSetup? zoneSetup;
-
   /// Every athlete, so each stream can be scored against its own attributed
-  /// athlete's zones. See [_zoneSetupForSeries].
+  /// athlete's zones via [zoneSetupForStream]. The default athlete gets no
+  /// special role here — Activity analysis is strictly per stream.
   final List<Athlete> athletes;
-  final int? restingHr;
-  final VoidCallback onOpenSettings;
+  final void Function(int athleteId) onOpenAthleteProfile;
   final void Function(int startMs, int endMs) onWorkoutChanged;
   final VoidCallback onDelete;
-
-  /// The zones a single stream should be scored against: its attributed
-  /// athlete's, falling back to the default athlete's ([zoneSetup]) when the
-  /// stream is unattributed or that athlete is gone.
-  ZoneSetup? _zoneSetupForSeries(HrSeries s) {
-    final id = s.athleteId;
-    if (id == null) return zoneSetup;
-    for (final a in athletes) {
-      if (a.id == id) {
-        return zoneSetupFor(
-          maxHr: a.maxHeartrate,
-          restingHr: a.restingHeartrate,
-        );
-      }
-    }
-    return zoneSetup;
-  }
 
   String _formatDuration(int ms) {
     final totalSec = ms ~/ 1000;
@@ -192,90 +166,29 @@ class _ActivityBody extends StatelessWidget {
         '${d.day.toString().padLeft(2, '0')} $hh:$min';
   }
 
-  /// Max HR for each time-third of the workout window.
-  List<int?> _computeThirds(int? startMs, int? endMs) {
-    final filtered = rows.where((r) {
-      if (startMs != null && r.tMs < startMs) return false;
-      if (endMs != null && r.tMs > endMs) return false;
-      return true;
-    }).toList();
-    if (filtered.length < 3) return [null, null, null];
-    final t0 = filtered.first.tMs;
-    final t1 = filtered.last.tMs;
-    if (t0 == t1) return [null, null, null];
-    final span = (t1 - t0) / 3;
-    return List.generate(3, (i) {
-      final lo = t0 + (span * i).round();
-      final hi = t0 + (span * (i + 1)).round();
-      return HrStats.fromHeartRates(
-        filtered.where((r) => r.tMs >= lo && r.tMs < hi).map((r) => r.hr),
-      ).max;
-    });
-  }
-
-  /// Total extra beats above resting HR, integrated over workout window.
-  /// Units: beats (bpm × minutes = beats).
-  int? _computeExtraBeats(int? startMs, int? endMs) {
-    final resting = restingHr;
-    if (resting == null) return null;
-    final filtered = rows.where((r) {
-      if (startMs != null && r.tMs < startMs) return false;
-      if (endMs != null && r.tMs > endMs) return false;
-      return r.hr != null && r.hr! > 0;
-    }).toList();
-    if (filtered.length < 2) return null;
-    double extra = 0;
-    for (int i = 0; i < filtered.length - 1; i++) {
-      final hr = filtered[i].hr;
-      if (hr == null || hr <= 0) continue;
-      final dtMin = (filtered[i + 1].tMs - filtered[i].tMs) / 60000;
-      extra += (hr - resting).clamp(0, 9999) * dtMin;
-    }
-    return extra.round();
-  }
-
-  String _formatBeats(int beats) {
-    if (beats >= 1000) return '${(beats / 1000).toStringAsFixed(1)}K';
-    return beats.toString();
-  }
-
-  /// Per-third max HR plus the load score — the workout's shape and intensity.
-  /// Computed from the primary set; shared by the single- and multi-device views.
-  Widget _shapeStats(BuildContext context, List<int?> thirds, int? extraBeats) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+  /// Per-third max HR — the workout's shape. Profile-free (max HR needs no
+  /// zones), so it renders for the primary/reference stream regardless of that
+  /// stream's athlete. The load metric (extra beats) is per-stream and lives in
+  /// each [_StreamStatsBlock] instead, since it needs that stream's resting HR.
+  Widget _shapeStats(BuildContext context, List<int?> thirds) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _TrendStat(
-              label: '1st third',
-              value: thirds[0],
-              tooltip: 'Max HR in the first third of the workout',
-            ),
-            _TrendStat(
-              label: '2nd third',
-              value: thirds[1],
-              tooltip: 'Max HR in the second third of the workout',
-            ),
-            _TrendStat(
-              label: '3rd third',
-              value: thirds[2],
-              tooltip: 'Max HR in the final third of the workout',
-            ),
-          ],
+        _TrendStat(
+          label: '1st third',
+          value: thirds[0],
+          tooltip: 'Max HR in the first third of the workout',
         ),
-        if (extraBeats != null) ...[
-          const SizedBox(height: 16),
-          Center(
-            child: _TrendStat(
-              label: 'extra beats',
-              valueText: _formatBeats(extraBeats),
-              tooltip:
-                  'Total beats above resting HR during the workout ((bpm - rest_bpm) × minutes)',
-            ),
-          ),
-        ],
+        _TrendStat(
+          label: '2nd third',
+          value: thirds[1],
+          tooltip: 'Max HR in the second third of the workout',
+        ),
+        _TrendStat(
+          label: '3rd third',
+          value: thirds[2],
+          tooltip: 'Max HR in the final third of the workout',
+        ),
       ],
     );
   }
@@ -302,12 +215,14 @@ class _ActivityBody extends StatelessWidget {
     );
     final points = rows.map((r) => HrChartPoint(tMs: r.tMs, hr: r.hr)).toList();
 
-    // The top overview chart zone-colors the primary stream against its
-    // attributed athlete's zones (falling back to the default athlete). Each
-    // per-stream block below resolves zones the same way via [_zoneSetupForSeries].
+    // The top overview chart zone-colors the primary stream against its own
+    // attributed athlete's zones — null (neutral line) when that stream is
+    // unattributed or its athlete has no profile. Each per-stream block below
+    // resolves zones the same way via [zoneSetupForStream]. No default-athlete
+    // fallback: analysis belongs to the athlete the stream is attributed to.
     final primaryZoneSetup = series.isNotEmpty
-        ? _zoneSetupForSeries(series.first)
-        : zoneSetup;
+        ? zoneSetupForStream(series.first.athleteId, athletes)
+        : null;
 
     // Multi-device: one line per device, colored by set order, plus per-device
     // stats below. Single-device review is unchanged.
@@ -339,8 +254,15 @@ class _ActivityBody extends StatelessWidget {
       _formatDuration(displayDurationMs),
     ].join('  ·  ');
 
-    final thirds = _computeThirds(workoutStart, workoutEnd);
-    final extraBeats = _computeExtraBeats(workoutStart, workoutEnd);
+    // `rows` always belong to the workout's stable primary sample set (lowest
+    // set id). `watchHrSeries` omits empty sets, so `series.first` could be a
+    // later device and must not become the reference stream by accident.
+    final referenceSamples = rows;
+    final thirds = computeThirds(
+      referenceSamples,
+      windowStartMs: workoutStart,
+      windowEndMs: workoutEnd,
+    );
 
     return Align(
       alignment: Alignment.topCenter,
@@ -415,19 +337,20 @@ class _ActivityBody extends StatelessWidget {
                   index: i,
                   multi: multi,
                   series: series[i],
-                  zoneSetup: _zoneSetupForSeries(series[i]),
+                  zoneSetup: zoneSetupForStream(series[i].athleteId, athletes),
                   axis: chartAxis,
                   fullEndMs: activity.durationMs,
                   activityStartMs: activity.startedAtMs,
                   windowStartMs: workoutStart,
                   windowEndMs: workoutEnd,
-                  onOpenSettings: onOpenSettings,
+                  onOpenAthleteProfile: onOpenAthleteProfile,
                 ),
                 const SizedBox(height: 16),
               ],
-              // Shape and load are single-athlete analysis, so they reflect the
-              // primary (first) stream.
-              if (series.isNotEmpty) ...[
+              // Workout shape is anchored to the primary (reference) stream.
+              // Its thirds are profile-free; load belongs to each stream because
+              // it needs that stream's resting HR.
+              if (rows.isNotEmpty) ...[
                 Text(
                   multi
                       ? 'Workout shape · ${series.first.deviceName ?? 'Device 1'}'
@@ -435,7 +358,7 @@ class _ActivityBody extends StatelessWidget {
                   style: theme.textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                _shapeStats(context, thirds, extraBeats),
+                _shapeStats(context, thirds),
               ],
               const SizedBox(height: 32),
               TextButton.icon(
@@ -457,10 +380,17 @@ class _ActivityBody extends StatelessWidget {
   }
 }
 
+/// Compact beats label: "6.8K" past a thousand, the plain count below.
+String _formatBeats(int beats) {
+  if (beats >= 1000) return '${(beats / 1000).toStringAsFixed(1)}K';
+  return beats.toString();
+}
+
 /// One HR stream's review: a name header, the attribution picker, its min/avg/max
-/// over the workout window, and its time-in-zone breakdown (or a locked prompt
-/// when its athlete has no zones). Stats and breakdown are scored against
-/// [zoneSetup] — this stream's attributed athlete's zones.
+/// over the workout window, its time-in-zone breakdown, and its extra-beats load
+/// (or a setup prompt when its athlete has no zones). Every profile-dependent
+/// value — zones, breakdown, load — is scored against [zoneSetup], this stream's
+/// **attributed** athlete's zones, never the default athlete's.
 ///
 /// A solo activity renders exactly one of these, so it never diverges from the
 /// multi-stream view. [multi] adds only the comparison chrome the multi view
@@ -478,7 +408,7 @@ class _StreamStatsBlock extends StatelessWidget {
     required this.activityStartMs,
     required this.windowStartMs,
     required this.windowEndMs,
-    required this.onOpenSettings,
+    required this.onOpenAthleteProfile,
   });
 
   final int index;
@@ -490,7 +420,7 @@ class _StreamStatsBlock extends StatelessWidget {
   final int activityStartMs;
   final int? windowStartMs;
   final int? windowEndMs;
-  final VoidCallback onOpenSettings;
+  final void Function(int athleteId) onOpenAthleteProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -510,6 +440,17 @@ class _StreamStatsBlock extends StatelessWidget {
         : computeZoneTimes(
             samples,
             setup,
+            windowStartMs: windowStartMs,
+            windowEndMs: windowEndMs,
+          );
+    // Load is per stream: integrated against this stream's *own* athlete's
+    // resting HR. A stream with no profile ([setup] == null) shows the setup
+    // prompt and no load, never a value borrowed from the default athlete.
+    final extraBeats = setup == null
+        ? null
+        : computeExtraBeats(
+            samples,
+            restingHr: setup.restingHr,
             windowStartMs: windowStartMs,
             windowEndMs: windowEndMs,
           );
@@ -574,10 +515,25 @@ class _StreamStatsBlock extends StatelessWidget {
         const SizedBox(height: 12),
         HrStatsRow(stats: stats),
         const SizedBox(height: 16),
-        if (setup == null)
-          ZoneLockedPrompt(onTap: onOpenSettings)
-        else
+        if (setup == null) ...[
+          if (series.athleteId != null)
+            ZoneLockedPrompt(
+              onTap: () => onOpenAthleteProfile(series.athleteId!),
+            ),
+        ] else ...[
           ZoneBreakdown(setup: setup, times: zoneTimes!),
+          if (extraBeats != null) ...[
+            const SizedBox(height: 16),
+            Center(
+              child: _TrendStat(
+                label: 'extra beats',
+                valueText: _formatBeats(extraBeats),
+                tooltip:
+                    'Total beats above resting HR during the workout ((bpm - rest_bpm) × minutes)',
+              ),
+            ),
+          ],
+        ],
       ],
     );
 

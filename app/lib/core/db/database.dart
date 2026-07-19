@@ -400,10 +400,7 @@ class AppDatabase extends _$AppDatabase {
   /// Re-attributes a single HR stream to an athlete, or clears it ([athleteId]
   /// null = unattributed). The per-device athlete picker writes through here. See
   /// docs/design/multi-athlete.md.
-  Future<void> setStreamAthlete({
-    required int setId,
-    required int? athleteId,
-  }) {
+  Future<void> setStreamAthlete({required int setId, required int? athleteId}) {
     return (update(sampleSets)..where((s) => s.id.equals(setId))).write(
       SampleSetsCompanion(athleteId: Value(athleteId)),
     );

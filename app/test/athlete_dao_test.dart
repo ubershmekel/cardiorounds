@@ -5,10 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 /// Re-attributes a stream to an athlete (or null) the way the picker will once
 /// the UI lands; here we poke the column directly to build mixed-owner sessions.
 Future<void> _setStreamAthlete(AppDatabase db, int setId, int? athleteId) {
-  return db.customStatement('UPDATE sample_sets SET athlete_id = ? WHERE id = ?', [
-    athleteId,
-    setId,
-  ]);
+  return db.customStatement(
+    'UPDATE sample_sets SET athlete_id = ? WHERE id = ?',
+    [athleteId, setId],
+  );
 }
 
 Future<int> _hrSampleCount(AppDatabase db) async {
@@ -35,18 +35,21 @@ void main() {
       expect(athletes.last.maxHeartrate, 190);
     });
 
-    test('default athlete is the lowest id, stable across create/delete', () async {
-      final a = await db.ensureDefaultAthlete();
-      final b = await db.insertAthlete(name: 'Bob');
-      // Adding a later athlete must not change who the default is.
-      expect((await db.watchDefaultAthlete().first).id, a.id);
-      expect((await db.ensureDefaultAthlete()).id, a.id);
+    test(
+      'default athlete is the lowest id, stable across create/delete',
+      () async {
+        final a = await db.ensureDefaultAthlete();
+        final b = await db.insertAthlete(name: 'Bob');
+        // Adding a later athlete must not change who the default is.
+        expect((await db.watchDefaultAthlete().first).id, a.id);
+        expect((await db.ensureDefaultAthlete()).id, a.id);
 
-      // After removing the original default, the next-lowest becomes default.
-      await db.deleteAthlete(a.id);
-      expect((await db.watchDefaultAthlete().first).id, b.id);
-      expect((await db.ensureDefaultAthlete()).id, b.id);
-    });
+        // After removing the original default, the next-lowest becomes default.
+        await db.deleteAthlete(a.id);
+        expect((await db.watchDefaultAthlete().first).id, b.id);
+        expect((await db.ensureDefaultAthlete()).id, b.id);
+      },
+    );
 
     test('insertAthlete defaults to a blank, unset athlete', () async {
       final a = await db.insertAthlete();
@@ -108,26 +111,29 @@ void main() {
         expect(await db.countWorkoutsOnlyFromAthlete(b.id), 0);
       });
 
-      test('deletion impact separates solo workouts from shared streams', () async {
-        // Alice: one solo workout, plus a stream in each of the shared and
-        // unattributed sessions -> 1 solo workout, 3 streams total.
-        expect(
-          await db.athleteDeletionImpact(a.id),
-          (soloWorkouts: 1, streams: 3),
-        );
-        // Bob only ever wears the second strap of the shared session -> no solo
-        // workouts, but one stream is still removed on delete.
-        expect(
-          await db.athleteDeletionImpact(b.id),
-          (soloWorkouts: 0, streams: 1),
-        );
-        // A never-recorded athlete loses nothing.
-        final c = await db.insertAthlete(name: 'Cara');
-        expect(
-          await db.athleteDeletionImpact(c.id),
-          (soloWorkouts: 0, streams: 0),
-        );
-      });
+      test(
+        'deletion impact separates solo workouts from shared streams',
+        () async {
+          // Alice: one solo workout, plus a stream in each of the shared and
+          // unattributed sessions -> 1 solo workout, 3 streams total.
+          expect(await db.athleteDeletionImpact(a.id), (
+            soloWorkouts: 1,
+            streams: 3,
+          ));
+          // Bob only ever wears the second strap of the shared session -> no solo
+          // workouts, but one stream is still removed on delete.
+          expect(await db.athleteDeletionImpact(b.id), (
+            soloWorkouts: 0,
+            streams: 1,
+          ));
+          // A never-recorded athlete loses nothing.
+          final c = await db.insertAthlete(name: 'Cara');
+          expect(await db.athleteDeletionImpact(c.id), (
+            soloWorkouts: 0,
+            streams: 0,
+          ));
+        },
+      );
 
       test('deletes solo workouts but keeps shared sessions', () async {
         await db.deleteAthlete(a.id);
@@ -138,7 +144,10 @@ void main() {
         final ids = (await db.watchActivities().first).map((x) => x.id).toSet();
         expect(ids.contains(soloActivity), isFalse); // emptied -> deleted
         expect(ids.contains(sharedActivity), isTrue); // B's stream survives
-        expect(ids.contains(unattributedActivity), isTrue); // NULL stream survives
+        expect(
+          ids.contains(unattributedActivity),
+          isTrue,
+        ); // NULL stream survives
 
         // The shared session keeps exactly its one remaining (Bob's) stream.
         final sharedSets = await db.hrSetsForActivity(sharedActivity);
@@ -163,39 +172,45 @@ void main() {
       });
     });
 
-    test('setStreamAthlete re-attributes a single stream, or clears it', () async {
-      final a = await db.ensureDefaultAthlete();
-      final b = await db.insertAthlete(name: 'Bob');
-      final started = await db.startActivityWithDevices(
-        athleteId: a.id,
-        startedAtMs: 0,
-        deviceIds: [null],
-      );
-      final setId = started.hrSetIds[0];
+    test(
+      'setStreamAthlete re-attributes a single stream, or clears it',
+      () async {
+        final a = await db.ensureDefaultAthlete();
+        final b = await db.insertAthlete(name: 'Bob');
+        final started = await db.startActivityWithDevices(
+          athleteId: a.id,
+          startedAtMs: 0,
+          deviceIds: [null],
+        );
+        final setId = started.hrSetIds[0];
 
-      await db.setStreamAthlete(setId: setId, athleteId: b.id);
-      expect((await db.athleteForActivity(started.activityId))?.id, b.id);
+        await db.setStreamAthlete(setId: setId, athleteId: b.id);
+        expect((await db.athleteForActivity(started.activityId))?.id, b.id);
 
-      await db.setStreamAthlete(setId: setId, athleteId: null);
-      expect(await db.athleteForActivity(started.activityId), isNull);
-    });
+        await db.setStreamAthlete(setId: setId, athleteId: null);
+        expect(await db.athleteForActivity(started.activityId), isNull);
+      },
+    );
 
-    test('watchStreamAthlete emits the stream owner and updates on re-attribution', () async {
-      final a = await db.ensureDefaultAthlete();
-      final b = await db.insertAthlete(name: 'Bob');
-      final started = await db.startActivityWithDevices(
-        athleteId: a.id,
-        startedAtMs: 0,
-        deviceIds: [null],
-      );
-      final setId = started.hrSetIds[0];
+    test(
+      'watchStreamAthlete emits the stream owner and updates on re-attribution',
+      () async {
+        final a = await db.ensureDefaultAthlete();
+        final b = await db.insertAthlete(name: 'Bob');
+        final started = await db.startActivityWithDevices(
+          athleteId: a.id,
+          startedAtMs: 0,
+          deviceIds: [null],
+        );
+        final setId = started.hrSetIds[0];
 
-      expect(await db.watchStreamAthlete(setId).first, a.id);
-      await db.setStreamAthlete(setId: setId, athleteId: b.id);
-      expect(await db.watchStreamAthlete(setId).first, b.id);
-      await db.setStreamAthlete(setId: setId, athleteId: null);
-      expect(await db.watchStreamAthlete(setId).first, isNull);
-    });
+        expect(await db.watchStreamAthlete(setId).first, a.id);
+        await db.setStreamAthlete(setId: setId, athleteId: b.id);
+        expect(await db.watchStreamAthlete(setId).first, b.id);
+        await db.setStreamAthlete(setId: setId, athleteId: null);
+        expect(await db.watchStreamAthlete(setId).first, isNull);
+      },
+    );
 
     group('athleteForActivity (derived owner = primary set)', () {
       test('returns the primary stream owner', () async {

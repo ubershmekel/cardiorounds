@@ -126,7 +126,8 @@ void main() {
         200: 2, // activity 20 -> Bob
         301: 1, // activity 30 (multi-device) -> Alice
         302: 1, // both streams of activity 30 -> Alice
-        400: null, // activity 40's athlete 99 doesn't exist -> NULL, not a FK error
+        400:
+            null, // activity 40's athlete 99 doesn't exist -> NULL, not a FK error
       });
     });
 

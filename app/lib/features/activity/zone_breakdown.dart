@@ -146,6 +146,7 @@ class _ZoneRow extends StatelessWidget {
 class ZoneLockedPrompt extends StatelessWidget {
   const ZoneLockedPrompt({super.key, required this.onTap});
 
+  /// Opens the attributed athlete's profile to complete their HR settings.
   final VoidCallback onTap;
 
   @override
@@ -157,7 +158,7 @@ class ZoneLockedPrompt extends StatelessWidget {
         leading: const Icon(Icons.lock_outline),
         title: const Text('Zone breakdown is locked'),
         subtitle: const Text(
-          'Set both max HR and resting HR in Settings to see time per zone.',
+          'Set both max HR and resting HR for this athlete to see time per zone.',
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,

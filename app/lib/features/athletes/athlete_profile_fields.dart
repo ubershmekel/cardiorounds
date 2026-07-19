@@ -107,17 +107,20 @@ class _AthleteProfileFieldsState extends ConsumerState<AthleteProfileFields> {
     // HR columns untouched (keeping the last valid values) until the pair is
     // fixed, but still save the name. The warning row prompts the correction.
     final swapped = _isHRSwapped;
-    final newMax = swapped ? null : (maxText.isEmpty ? null : int.tryParse(maxText));
-    final newResting =
-        swapped ? null : (restingText.isEmpty ? null : int.tryParse(restingText));
+    final newMax = swapped
+        ? null
+        : (maxText.isEmpty ? null : int.tryParse(maxText));
+    final newResting = swapped
+        ? null
+        : (restingText.isEmpty ? null : int.tryParse(restingText));
 
     // Skip no-op writes. dispose/didUpdateWidget call _persist on every unmount,
     // and a write re-fires the athletes query stream — which rebuilds and
     // unmounts these fields again. Writing only on a real change is what keeps
     // that from becoming an endless write→rebuild→write loop.
     final nameChanged = name != _savedName;
-    final hrChanged = !swapped &&
-        (newMax != _savedMaxHr || newResting != _savedRestingHr);
+    final hrChanged =
+        !swapped && (newMax != _savedMaxHr || newResting != _savedRestingHr);
     if (!nameChanged && !hrChanged) return;
 
     // Saves are user-driven and rare, so one line each is cheap. A *burst* of

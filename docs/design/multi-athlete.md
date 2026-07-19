@@ -125,17 +125,51 @@ max/resting HR — exact for one person wearing two sensors, only approximate wh
 the straps are different people (see
 [multi-device-recording.md](multi-device-recording.md)). Once each stream carries
 its own `athlete_id`, **each per-device block scores against that person's
-zones** — both the block's **zone-colored chart** and its time-in-zone breakdown
-use that stream's athlete's max/resting HR. An **unattributed** stream falls back
-to the default athlete's zones. Resolving a stream's zones therefore needs its
-`athlete_id`, so `watchHrSeries` exposes `athlete_id` on each `HrSeries`.
-Activity-level shape and load score still come from the primary set and its
-athlete.
+zones** — the block's **zone-colored chart**, its time-in-zone breakdown, and its
+extra-beats load all use that stream's athlete's max/resting HR. Resolving a
+stream's zones needs its `athlete_id`, so `watchHrSeries` exposes `athlete_id` on
+each `HrSeries`.
 
-> Follow-up: `shape_start/mid/end` and the load score are stored on the activity
-> and computed from the primary set. If the primary stream is later deleted (a
-> shared session losing its primary athlete), those values go stale until
-> recomputed. Acceptable for v1; note at the delete site.
+### Live coloring vs. review analysis (they resolve zones differently)
+
+The default athlete is the **Home-screen viewing context** — "whose single live
+number do we color" — and a live-recording convenience, **not** an
+Activity-analysis input. The two screens therefore treat an unattributed or
+profile-less stream differently, on purpose:
+
+- **Recording screen (live):** an unattributed strap falls back to the default
+  athlete's zones for live coloring, so the number is colored while you record.
+  Home's single live HR value likewise uses the default athlete's profile.
+- **Activity review screen (analysis):** resolution is **strictly per stream with
+  no default fallback**. A stream that is unattributed, or whose athlete has no
+  valid max/resting HR, keeps the "set up your profile" prompt and omits every
+  profile-dependent value (zones, HR-derived metrics, **extra beats**) rather than
+  borrowing the default athlete's. This is what makes a workout analyse correctly
+  when **no stream belongs to the default athlete** — the default is never read.
+  The locked prompt opens the attributed athlete's profile; an unattributed stream
+  shows only its athlete picker, since there is no profile to complete until an
+  athlete is assigned.
+
+Extra beats is inherently per-athlete (it integrates HR above that person's
+resting HR), so it is a **per-stream** metric shown in each stream's block, scored
+against that stream's own athlete.
+
+### The shape's reference stream
+
+Activity-level **workout shape** (per-third max HR) is anchored to the workout's
+stable **reference stream — the primary sample set** (lowest `sample_sets.id`),
+never "whichever athlete is default or first valid". The shape thirds are
+profile-free and always render. Any shape/load value that *does* need a profile
+uses the reference stream's **attributed athlete**; if that stream is unattributed
+or its profile is incomplete, the shape renders **without** those values instead
+of falling back to the default athlete. `watchHrSeries` omits sets without
+samples, so the Activity screen takes the reference samples from the dedicated
+primary-set query rather than treating the first returned series as primary.
+
+> Follow-up: `shape_start/mid/end` are stored on the activity and computed from
+> the primary set. If the primary stream is later deleted (a shared session losing
+> its primary athlete), those values go stale until recomputed. Acceptable for v1;
+> note at the delete site.
 
 ## Migration v2 → v3
 

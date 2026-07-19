@@ -257,13 +257,30 @@ For a multiple-device activity a **joint comparison chart** at the top draws one
 line per device with a legend (color swatch + device name) for at-a-glance
 comparison. Below it **each device** gets its own **per-device block**: its own
 zone-colored HR chart (a full pan/pinch/tap `ZoomableHrChart`, same as the
-single-device view), min/avg/max, and time-in-zone breakdown. Each device's chart
-and breakdown are scored against **that stream's own athlete's zones** (the
-athlete the strap is attributed to; the default athlete when unattributed) — so a
-shared session with two people shows each person against their own max/resting HR.
-See [multi-athlete.md](multi-athlete.md). The workout shape and load score are
-still shown once, computed from the **primary** device and labelled with its name.
-See [multi-device-recording.md](multi-device-recording.md).
+single-device view), min/avg/max, time-in-zone breakdown, and **its own extra-beats
+load**.
+
+**Analysis on this screen is strictly per stream.** Every profile-dependent
+value — zone coloring, time-in-zone, HR-derived metrics, and extra beats — is
+scored against **that stream's attributed athlete's** max/resting HR. Unlike the
+recording screen, an unattributed stream (or one whose athlete has no valid
+max/resting HR) does **not** fall back to the default athlete: it keeps the same
+"set up your profile" prompt and simply omits the profile-dependent metrics. The
+**default athlete is Home's viewing context, never an Activity-analysis input**, so
+a workout scores correctly even when none of its streams belongs to the default
+athlete. An attributed stream's prompt opens that exact athlete's profile; an
+unattributed stream shows only its athlete picker, since no profile is relevant
+until it has an owner. See
+[multi-athlete.md](multi-athlete.md).
+
+The **workout shape** (per-third max HR) is shown once, computed from the activity's
+**reference stream** — the workout's stable **primary sample set** (lowest set id),
+labelled with its device name in the multi-stream case. The shape thirds are
+profile-free and always render. Any shape/load value that needs a profile uses the
+reference stream's **attributed athlete**; if that stream is unattributed or its
+profile is incomplete, the shape renders **without** those values rather than
+borrowing the default athlete's. See
+[multi-device-recording.md](multi-device-recording.md).
 
 ### Marker editing
 

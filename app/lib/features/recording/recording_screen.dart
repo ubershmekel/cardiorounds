@@ -107,7 +107,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   /// has no max HR). See docs/design/multi-athlete.md.
   ZoneSetup? _zoneSetupForSet(int setId) {
     final athleteId = ref.watch(streamAthleteProvider(setId)).valueOrNull;
-    Athlete? owner = _athletes.isEmpty ? null : _athletes.first; // default owner
+    Athlete? owner = _athletes.isEmpty
+        ? null
+        : _athletes.first; // default owner
     if (athleteId != null) {
       for (final a in _athletes) {
         if (a.id == athleteId) {

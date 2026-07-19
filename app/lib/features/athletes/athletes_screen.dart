@@ -11,7 +11,9 @@ import 'athlete_profile_fields.dart';
 /// is disabled at the last remaining athlete. Fields auto-save; see
 /// [AthleteProfileFields] and docs/design/multi-athlete.md.
 class AthletesScreen extends ConsumerStatefulWidget {
-  const AthletesScreen({super.key});
+  const AthletesScreen({super.key, this.initialAthleteId});
+
+  final int? initialAthleteId;
 
   @override
   ConsumerState<AthletesScreen> createState() => _AthletesScreenState();
@@ -21,6 +23,12 @@ class _AthletesScreenState extends ConsumerState<AthletesScreen> {
   // Track the shown athlete by id, not list index, so it survives the list
   // stream re-emitting after a create or delete.
   int? _selectedId;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedId = widget.initialAthleteId;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +44,9 @@ class _AthletesScreenState extends ConsumerState<AthletesScreen> {
             return const Center(child: Text('No athletes'));
           }
           var index = list.indexWhere((a) => a.id == _selectedId);
-          if (index < 0) index = 0; // first open, or the selected one was deleted
+          if (index < 0) {
+            index = 0; // first open, or the selected one was deleted
+          }
           final athlete = list[index];
           return _AthletePager(
             athlete: athlete,

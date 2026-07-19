@@ -74,7 +74,11 @@ GoRouter buildRouter(Ref ref) {
                 routes: [
                   GoRoute(
                     path: 'athletes',
-                    builder: (_, _) => const AthletesScreen(),
+                    builder: (_, state) => AthletesScreen(
+                      initialAthleteId: int.tryParse(
+                        state.uri.queryParameters['athleteId'] ?? '',
+                      ),
+                    ),
                   ),
                 ],
               ),
