@@ -64,7 +64,7 @@ void main() {
       expect(reattributed[1].athleteId, other.id);
     });
 
-    test('watchHrSeries omits sets that have no samples yet', () async {
+    test('watchHrSeries retains sets that have no samples yet', () async {
       final athlete = await db.ensureDefaultAthlete();
       final started = await db.startActivityWithDevices(
         athleteId: athlete.id,
@@ -75,8 +75,11 @@ void main() {
 
       final series = await db.watchHrSeries(started.activityId).first;
 
-      expect(series, hasLength(1));
-      expect(series.single.setId, started.hrSetIds[0]);
+      expect(series, hasLength(2));
+      expect(series[0].setId, started.hrSetIds[0]);
+      expect(series[0].samples, hasLength(1));
+      expect(series[1].setId, started.hrSetIds[1]);
+      expect(series[1].samples, isEmpty);
     });
   });
 }

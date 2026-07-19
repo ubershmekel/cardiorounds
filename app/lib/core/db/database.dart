@@ -541,11 +541,12 @@ class AppDatabase extends _$AppDatabase {
 
   /// All HR streams for an activity, one [HrSeries] per set (ordered by set id,
   /// samples by time), each carrying the device name when the device is still
-  /// known. Sets with no samples yet are omitted. Used by the multi-series chart.
+  /// known. Empty sets are retained so a failed primary device cannot make a
+  /// later device look like the activity's only or primary stream.
   Stream<List<HrSeries>> watchHrSeries(int activityId) {
     final query =
-        select(hrSamples).join([
-            innerJoin(sampleSets, sampleSets.id.equalsExp(hrSamples.setId)),
+        select(sampleSets).join([
+            leftOuterJoin(hrSamples, hrSamples.setId.equalsExp(sampleSets.id)),
             leftOuterJoin(devices, devices.id.equalsExp(sampleSets.deviceId)),
           ])
           ..where(
@@ -571,7 +572,8 @@ class AppDatabase extends _$AppDatabase {
             samples: [],
           );
         });
-        series.samples.add(row.readTable(hrSamples));
+        final sample = row.readTableOrNull(hrSamples);
+        if (sample != null) series.samples.add(sample);
       }
       return [for (final id in order) bySet[id]!];
     });

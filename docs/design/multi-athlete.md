@@ -80,7 +80,9 @@ Deletion is destructive by design and removes that athlete's data:
 
 Mechanically, `ON DELETE CASCADE` on `sample_sets.athlete_id` removes the
 streams when the athlete row is deleted; the DAO deletes the now-empty
-activities in the same transaction.
+activities in the same transaction. Athlete deletion is disabled while a
+recording is active, so this cascade cannot remove live sample sets that the
+recording controller is still writing to.
 
 ## Attribution UX (who wore which strap)
 
@@ -163,9 +165,8 @@ profile-free and always render. Any shape/load value that _does_ need a profile
 uses the reference stream's **attributed athlete**; if that stream is
 unattributed or its profile is incomplete, the shape renders **without** those
 values instead of falling back to the default athlete. `watchHrSeries` omits
-sets without samples, so the Activity screen takes the reference samples from
-the dedicated primary-set query rather than treating the first returned series
-as primary.
+no sets: it retains empty sets so device order, including the primary reference
+stream, remains stable even when a strap never produced a sample.
 
 > Follow-up: `shape_start/mid/end` are stored on the activity and computed from
 > the primary set. If the primary stream is later deleted (a shared session

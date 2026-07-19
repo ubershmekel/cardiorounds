@@ -33,6 +33,7 @@ class _AthletesScreenState extends ConsumerState<AthletesScreen> {
   @override
   Widget build(BuildContext context) {
     final athletes = ref.watch(athletesProvider);
+    final recordingActive = ref.watch(activeRecordingIdProvider) != null;
     return Scaffold(
       appBar: AppBar(title: const Text('Athletes')),
       body: athletes.when(
@@ -59,8 +60,11 @@ class _AthletesScreenState extends ConsumerState<AthletesScreen> {
                 ? () => setState(() => _selectedId = list[index + 1].id)
                 : null,
             onCreate: _createAthlete,
-            onDelete: list.length > 1
+            onDelete: list.length > 1 && !recordingActive
                 ? () => _confirmDelete(athlete, index, list)
+                : null,
+            deleteDisabledReason: recordingActive
+                ? 'Stop the active recording before deleting an athlete.'
                 : null,
           );
         },
@@ -79,6 +83,16 @@ class _AthletesScreenState extends ConsumerState<AthletesScreen> {
     int index,
     List<Athlete> list,
   ) async {
+    if (ref.read(activeRecordingIdProvider) != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Stop the active recording before deleting an athlete.',
+          ),
+        ),
+      );
+      return;
+    }
     final impact = await ref.read(
       athleteDeletionImpactProvider(athlete.id).future,
     );
@@ -137,6 +151,17 @@ class _AthletesScreenState extends ConsumerState<AthletesScreen> {
       ),
     );
     if (confirmed != true) return;
+    if (ref.read(activeRecordingIdProvider) != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Stop the active recording before deleting an athlete.',
+          ),
+        ),
+      );
+      return;
+    }
 
     // Land on an adjacent athlete once this one is gone.
     final neighbor = list[index > 0 ? index - 1 : index + 1];
@@ -155,6 +180,7 @@ class _AthletePager extends StatelessWidget {
     required this.onNext,
     required this.onCreate,
     required this.onDelete,
+    required this.deleteDisabledReason,
   });
 
   final Athlete athlete;
@@ -164,6 +190,7 @@ class _AthletePager extends StatelessWidget {
   final VoidCallback? onNext;
   final VoidCallback onCreate;
   final VoidCallback? onDelete;
+  final String? deleteDisabledReason;
 
   @override
   Widget build(BuildContext context) {
@@ -212,6 +239,15 @@ class _AthletePager extends StatelessWidget {
           // Disabled at the last athlete: the app requires at least one.
           onPressed: onDelete,
         ),
+        if (deleteDisabledReason != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            deleteDisabledReason!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ],
     );
   }

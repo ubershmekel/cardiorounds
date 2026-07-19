@@ -255,8 +255,8 @@ class _ActivityBody extends StatelessWidget {
     ].join('  ·  ');
 
     // `rows` always belong to the workout's stable primary sample set (lowest
-    // set id). `watchHrSeries` omits empty sets, so `series.first` could be a
-    // later device and must not become the reference stream by accident.
+    // set id). [watchHrSeries] retains empty sets, so series ordering matches
+    // the activity's device ordering even when a strap never produced a sample.
     final referenceSamples = rows;
     final thirds = computeThirds(
       referenceSamples,
