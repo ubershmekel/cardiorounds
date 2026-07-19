@@ -5,9 +5,14 @@ import 'hr_stats.dart';
 /// A compact min / avg / max readout, shared by the recording and review
 /// screens.
 class HrStatsRow extends StatelessWidget {
-  const HrStatsRow({super.key, required this.stats});
+  const HrStatsRow({
+    super.key,
+    required this.stats,
+    this.extraStats = const [],
+  });
 
   final HrStats stats;
+  final List<Widget> extraStats;
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +34,7 @@ class HrStatsRow extends StatelessWidget {
           value: stats.max,
           tooltip: 'Maximum heart rate during the workout',
         ),
+        ...extraStats,
       ],
     );
   }

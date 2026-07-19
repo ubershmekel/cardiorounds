@@ -195,6 +195,10 @@ a round started and has not yet ended that label).
 - Elapsed time (ticking)
 - A live HR chart (see Chart spec below)
 - Min / avg / max heart rate
+- Exact live zone stat (for example `Z2.5`) when both max and resting HR are set
+  in Settings, shown beside min / avg / max; tapping toggles the stat to HR
+  Load, where resting HR is 0% and max HR is 100%, and tapping again returns to
+  exact zone
 - Time-in-zone breakdown (when both max and resting HR are set in Settings)
 - A stop button (requires confirmation modal); replaced by a "Recording
   recovery…" label during the recovery period
@@ -216,13 +220,14 @@ Otherwise the chart uses a neutral single-color line.
 When more than one device is recording, the single large BPM number is replaced
 by a **per-device block** for each strap: a color swatch (matching that device's
 chart line), the device name, its current BPM in zone color, its connection
-status, and its **own** min/avg/max and time-in-zone breakdown. Below the blocks
-is a single shared chart drawing **one line per device** (see Chart spec); the
-per-device blocks double as the chart legend. Each device's current-BPM zone
-color and time-in-zone are scored against **that stream's attributed athlete's
-zones** (the default athlete when unattributed), so re-attributing a strap
-mid-recording updates its zones — and clears them if that athlete has no max HR
-(see [multi-athlete.md](multi-athlete.md) and
+status, and its **own** min/avg/max, exact zone / HR Load stat, and time-in-zone
+breakdown. Below the blocks is a single shared chart drawing **one line per
+device** (see Chart spec); the per-device blocks double as the chart legend.
+Each device's current-BPM zone color, exact zone / HR Load stat, and
+time-in-zone are scored against **that stream's attributed athlete's zones**
+(the default athlete when unattributed), so re-attributing a strap mid-recording
+updates its zones — and clears them if that athlete has no max HR (see
+[multi-athlete.md](multi-athlete.md) and
 [multi-device-recording.md](multi-device-recording.md)).
 
 ### Bluetooth disconnect during recording

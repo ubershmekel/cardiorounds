@@ -49,9 +49,41 @@ class ZoneSetup {
 
   int get hrr => maxHr - restingHr;
 
-  Zone? zoneFor(int? bpm) {
+  double? hrrFractionFor(int? bpm, {bool clamp = false}) {
     if (bpm == null) return null;
     final fraction = (bpm - restingHr) / hrr;
+    if (!clamp) return fraction;
+    return fraction.clamp(0.0, 1.0).toDouble();
+  }
+
+  double? hrLoadPercentFor(int? bpm) {
+    final fraction = hrrFractionFor(bpm, clamp: true);
+    return fraction == null ? null : fraction * 100;
+  }
+
+  double? floatingZoneFor(int? bpm) {
+    final fraction = hrrFractionFor(bpm, clamp: true);
+    if (fraction == null) return null;
+
+    for (var i = 0; i < Zone.values.length; i++) {
+      final lower = Zone.values[i].lowerFraction;
+      final upper = i + 1 < Zone.values.length
+          ? Zone.values[i + 1].lowerFraction
+          : 1.0;
+
+      if (fraction <= upper || i == Zone.values.length - 1) {
+        final zoneStart = (i + 1).toDouble();
+        final progress = (fraction - lower) / (upper - lower);
+        return zoneStart + progress.clamp(0.0, 1.0).toDouble();
+      }
+    }
+
+    return (Zone.values.length + 1).toDouble();
+  }
+
+  Zone? zoneFor(int? bpm) {
+    if (bpm == null) return null;
+    final fraction = hrrFractionFor(bpm)!;
     for (final z in Zone.values) {
       if (fraction < z.upperFraction) return z;
     }

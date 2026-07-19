@@ -246,7 +246,17 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        HrStatsRow(stats: stats),
+        HrStatsRow(
+          stats: stats,
+          extraStats: [
+            if (zoneSetup != null)
+              _LiveEffortStat(
+                key: ValueKey('single-effort-${device.setId}'),
+                bpm: device.currentBpm,
+                zoneSetup: zoneSetup,
+              ),
+          ],
+        ),
         if (zoneSetup != null) ...[
           const SizedBox(height: 24),
           ZoneBreakdown(setup: zoneSetup, times: zoneTimes!),
@@ -446,12 +456,103 @@ class _DeviceBlock extends StatelessWidget {
               _SignalStatusBanner(title: signalTitle, subtitle: signalSubtitle),
             ],
             const SizedBox(height: 12),
-            HrStatsRow(stats: stats),
+            HrStatsRow(
+              stats: stats,
+              extraStats: [
+                if (zoneSetup != null)
+                  _LiveEffortStat(
+                    key: ValueKey('device-effort-${device.setId}'),
+                    bpm: bpm,
+                    zoneSetup: zoneSetup!,
+                  ),
+              ],
+            ),
             if (zoneSetup != null) ...[
               const SizedBox(height: 16),
               ZoneBreakdown(setup: zoneSetup!, times: zoneTimes!),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LiveEffortStat extends StatefulWidget {
+  const _LiveEffortStat({
+    super.key,
+    required this.bpm,
+    required this.zoneSetup,
+  });
+
+  final int? bpm;
+  final ZoneSetup zoneSetup;
+
+  @override
+  State<_LiveEffortStat> createState() => _LiveEffortStatState();
+}
+
+class _LiveEffortStatState extends State<_LiveEffortStat> {
+  bool _showHrLoad = false;
+
+  void _toggle() {
+    setState(() => _showHrLoad = !_showHrLoad);
+    final message = _showHrLoad
+        ? 'Showing HR Load: resting HR is 0%, max HR is 100%.'
+        : 'Showing exact zone: Z2.5 means halfway through zone 2.';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final zoneValue = widget.zoneSetup.floatingZoneFor(widget.bpm);
+    final hrLoadPercent = widget.zoneSetup.hrLoadPercentFor(widget.bpm);
+    final value = _showHrLoad
+        ? hrLoadPercent == null
+              ? '--'
+              : '${hrLoadPercent.round()}%'
+        : zoneValue == null
+        ? '--'
+        : 'Z${zoneValue.toStringAsFixed(1)}';
+    final label = _showHrLoad ? 'HR Load' : 'zone';
+
+    return Tooltip(
+      message: _showHrLoad
+          ? 'HR Load between resting and max heart rate'
+          : 'Fractional heart-rate zone',
+      triggerMode: TooltipTriggerMode.tap,
+      child: InkWell(
+        onTap: _toggle,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 96),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
