@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+staged_file_list="$(mktemp)"
+trap 'rm -f "$staged_file_list"' EXIT
+
+git diff --cached --name-only -z --diff-filter=ACMR > "$staged_file_list"
+
+partially_staged_files="$(
+  comm -12 \
+    <(git diff --name-only --diff-filter=ACMR | sort) \
+    <(git diff --cached --name-only --diff-filter=ACMR | sort)
+)"
+
+if [[ -n "$partially_staged_files" ]]; then
+  echo "pre-commit: refusing to auto-format partially staged files:" >&2
+  echo "$partially_staged_files" >&2
+  echo >&2
+  echo "Commit the whole file, or run 'task format' and stage the intended changes manually." >&2
+  exit 1
+fi
+
+task format
+
+if [[ -s "$staged_file_list" ]]; then
+  xargs -0 git add -- < "$staged_file_list"
+fi

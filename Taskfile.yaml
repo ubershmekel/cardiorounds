@@ -60,6 +60,10 @@ tasks:
     cmds:
       - dart format app
       - npx prettier --write .
+  hooks:install:
+    desc: Configure Git to use the repo's shared hooks
+    cmds:
+      - git config core.hooksPath .githooks
   bump-version:
     desc:
       Bump the marketing patch and build in pubspec.yaml (e.g. 0.1.0+46 ->

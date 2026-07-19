@@ -16,3 +16,14 @@ designed for treadmill running, interval training and BJJ rounds.
 - Compare your historical stats
 - Export your data for backup or analysis
 - Open source, no lock in, no subscription
+
+## Development
+
+Install the shared Git hooks once per clone:
+
+```sh
+task hooks:install
+```
+
+The pre-commit hook runs `task format` and includes formatter changes for files
+that were already staged.
