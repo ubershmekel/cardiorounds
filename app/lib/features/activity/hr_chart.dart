@@ -223,7 +223,7 @@ class HrChart extends StatelessWidget {
       scrimColor: scheme.surface.withValues(alpha: 0.66),
       handleColor: scheme.primary,
       labelBackgroundColor: scheme.surfaceContainerHighest.withValues(
-        alpha: 0.92,
+        alpha: 0.85,
       ),
       labelStyle: theme.textTheme.labelSmall!.copyWith(
         color: scheme.onSurfaceVariant,
@@ -302,6 +302,7 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
   static const double _selectionLabelWidth = 82;
 
   HrChartSelection? _selection;
+  var _selectionGeneration = 0;
 
   @override
   void didUpdateWidget(_SelectableHrChart oldWidget) {
@@ -331,6 +332,22 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
     if (!plotRect.contains(position)) return;
 
     final tMs = g.tForX(position.dx);
+    final values = _valuesAtT(tMs);
+    if (values.isEmpty) return;
+    setState(() {
+      _selection = HrChartSelection(tMs: tMs, values: values);
+      _selectionGeneration++;
+    });
+  }
+
+  void _moveSelectionToX(double x, Size size) {
+    final g = HrChartGeometry(
+      size: size,
+      startMs: widget.startMs,
+      endMs: widget.endMs,
+      axis: widget.axis,
+    );
+    final tMs = g.tForX(x);
     final values = _valuesAtT(tMs);
     if (values.isEmpty) return;
     setState(() => _selection = HrChartSelection(tMs: tMs, values: values));
@@ -438,6 +455,8 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
                 borderColor: widget.gridColor,
                 textStyle: widget.labelStyle,
                 activityStartMs: widget.activityStartMs,
+                selectionGeneration: _selectionGeneration,
+                onSelectionDragged: (x) => _moveSelectionToX(x, size),
                 onDismissed: () => setState(() => _selection = null),
               ),
           ],
@@ -447,7 +466,7 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
   }
 }
 
-class _SelectionLabel extends StatelessWidget {
+class _SelectionLabel extends StatefulWidget {
   const _SelectionLabel({
     required this.selection,
     required this.geometry,
@@ -455,6 +474,8 @@ class _SelectionLabel extends StatelessWidget {
     required this.borderColor,
     required this.textStyle,
     required this.activityStartMs,
+    required this.selectionGeneration,
+    required this.onSelectionDragged,
     required this.onDismissed,
   });
 
@@ -464,48 +485,102 @@ class _SelectionLabel extends StatelessWidget {
   final Color borderColor;
   final TextStyle textStyle;
   final int? activityStartMs;
+  final int selectionGeneration;
+  final ValueChanged<double> onSelectionDragged;
   final VoidCallback onDismissed;
 
   @override
+  State<_SelectionLabel> createState() => _SelectionLabelState();
+}
+
+class _SelectionLabelState extends State<_SelectionLabel> {
+  Offset? _position;
+
+  @override
+  void didUpdateWidget(_SelectionLabel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A new plot tap starts its tooltip at the non-obscuring bottom position.
+    if (oldWidget.selectionGeneration != widget.selectionGeneration) {
+      _position = null;
+    }
+  }
+
+  Offset _defaultPosition(double width, double height) {
+    final left = (widget.geometry.xForT(widget.selection.tMs) - width / 2)
+        .clamp(widget.geometry.plotLeft, widget.geometry.plotRight - width)
+        .toDouble();
+    return Offset(left, widget.geometry.plotBottom - height);
+  }
+
+  Offset _clampPosition(Offset position, double width, double height) {
+    return Offset(
+      position.dx
+          .clamp(widget.geometry.plotLeft, widget.geometry.plotRight - width)
+          .toDouble(),
+      position.dy
+          .clamp(widget.geometry.plotTop, widget.geometry.plotBottom - height)
+          .toDouble(),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final geometry = widget.geometry;
     final availableWidth = geometry.plotWidth;
     final width = availableWidth < _SelectableHrChartState._selectionLabelWidth
         ? availableWidth
         : _SelectableHrChartState._selectionLabelWidth;
-    final left = (geometry.xForT(selection.tMs) - width / 2)
-        .clamp(geometry.plotLeft, geometry.plotRight - width)
-        .toDouble();
     // One row per device BPM plus the timestamp row; grow with device count.
-    final height = 22.0 + selection.values.length * 16.0;
+    final height = 22.0 + widget.selection.values.length * 16.0;
+    final position = _clampPosition(
+      _position ?? _defaultPosition(width, height),
+      width,
+      height,
+    );
     // Only tint per-device BPM when there's more than one to distinguish.
-    final multi = selection.values.length > 1;
+    final multi = widget.selection.values.length > 1;
     // Highest BPM on top, mirroring the lines' vertical order on the chart.
-    final values = [...selection.values]..sort((a, b) => b.hr.compareTo(a.hr));
+    final values = [...widget.selection.values]
+      ..sort((a, b) => b.hr.compareTo(a.hr));
 
     return Positioned(
-      left: left,
-      top: 0,
+      left: position.dx,
+      top: position.dy,
       width: width,
       height: height,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onDismissed,
+        onTap: widget.onDismissed,
+        onPanUpdate: (details) {
+          final nextPosition = _clampPosition(
+            (_position ?? position) + details.delta,
+            width,
+            height,
+          );
+          setState(() {
+            _position = nextPosition;
+          });
+          widget.onSelectionDragged(nextPosition.dx + width / 2);
+        },
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: backgroundColor,
-            border: Border.all(color: borderColor),
+            color: widget.backgroundColor,
+            border: Border.all(color: widget.borderColor),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                activityStartMs == null
-                    ? formatHrChartElapsed(selection.tMs)
-                    : formatHrChartTimeOfDay(activityStartMs!, selection.tMs),
+                widget.activityStartMs == null
+                    ? formatHrChartElapsed(widget.selection.tMs)
+                    : formatHrChartTimeOfDay(
+                        widget.activityStartMs!,
+                        widget.selection.tMs,
+                      ),
                 maxLines: 1,
                 overflow: TextOverflow.clip,
-                style: textStyle,
+                style: widget.textStyle,
               ),
               for (final v in values)
                 Text(
@@ -513,11 +588,11 @@ class _SelectionLabel extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.clip,
                   style: multi
-                      ? textStyle.copyWith(
+                      ? widget.textStyle.copyWith(
                           color: v.color,
                           fontWeight: FontWeight.w600,
                         )
-                      : textStyle,
+                      : widget.textStyle,
                 ),
             ],
           ),

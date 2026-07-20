@@ -42,5 +42,27 @@ void main() {
 
     expect(find.text('13:45'), findsOneWidget);
     expect(find.text('135 bpm'), findsOneWidget);
+
+    final label = find.ancestor(
+      of: find.text('135 bpm'),
+      matching: find.byType(DecoratedBox),
+    );
+    final labelRect = tester.getRect(label);
+    expect(labelRect.bottom, closeTo(chartTopLeft.dy + 182, 0.1));
+
+    await tester.drag(label, const Offset(60, 0));
+    await tester.pump();
+
+    expect(find.text('135 bpm'), findsNothing);
+    final updatedBpm = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((text) => text.data)
+        .whereType<String>()
+        .singleWhere((text) => text.endsWith(' bpm'));
+    final movedLabel = find.ancestor(
+      of: find.text(updatedBpm),
+      matching: find.byType(DecoratedBox),
+    );
+    expect(tester.getTopLeft(movedLabel).dx, greaterThan(labelRect.left));
   });
 }
