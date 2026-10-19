@@ -192,7 +192,8 @@ a round started and has not yet ended that label).
 ### Display
 
 - Live current heart rate (large, prominent); `--` on signal loss
-- Elapsed time (ticking)
+- Elapsed time (ticking and visually prominent), with the recording's local
+  start time directly beneath it in smaller, muted text
 - A live HR chart (see Chart spec below)
 - Min / avg / max heart rate
 - Exact live zone stat (for example `Z2.5`) when both max and resting HR are set

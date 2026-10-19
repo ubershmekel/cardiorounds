@@ -36,6 +36,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
   }
 
+  String _formatStartTime(BuildContext context, DateTime startedAt) {
+    return MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(startedAt),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+  }
+
   String _formatSignalAge(Duration d) {
     if (d.inMinutes >= 1) {
       return '${d.inMinutes}m ${d.inSeconds.remainder(60)}s';
@@ -211,11 +218,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
             Text('bpm', style: Theme.of(context).textTheme.titleMedium),
           ],
         ),
-        Center(
-          child: Text(
-            _formatElapsed(state.elapsed),
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
+        _RecordingTimeHeader(
+          elapsed: _formatElapsed(state.elapsed),
+          startTime: _formatStartTime(context, state.startedAt),
         ),
         // Only renders when >1 athlete exists; lets a coach say whose strap this
         // single stream is before the multi-device layout would show it inline.
@@ -314,11 +319,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Center(
-          child: Text(
-            _formatElapsed(state.elapsed),
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
+        _RecordingTimeHeader(
+          elapsed: _formatElapsed(state.elapsed),
+          startTime: _formatStartTime(context, state.startedAt),
         ),
         const SizedBox(height: 16),
         for (final device in state.devices) ...[
@@ -375,6 +378,30 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
           style: Theme.of(context).textTheme.titleLarge,
         ),
       ),
+    );
+  }
+}
+
+class _RecordingTimeHeader extends StatelessWidget {
+  const _RecordingTimeHeader({required this.elapsed, required this.startTime});
+
+  final String elapsed;
+  final String startTime;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Text(elapsed, style: theme.textTheme.headlineMedium),
+        const SizedBox(height: 2),
+        Text(
+          'Started at $startTime',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }
