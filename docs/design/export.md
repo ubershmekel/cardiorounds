@@ -57,13 +57,17 @@ no `cr:` block it imports the standard trackpoints as a single HR stream.
                          formatVersion="1" appVersion="1.2.3+45">
           <cr:Activity startedAtMs="..." durationMs="..." name="..."
                        sportType="kickboxing" shapeStart="4" shapeMid="7" shapeEnd="5"/>
-          <cr:Set kind="hr" primary="true">
+          <!-- Ana's set fills the trackpoints, so its samples live there -->
+          <cr:Set kind="hr" primary="true" samples="trackpoints">
             <cr:Device platformId="..." name="Polar H10"/>
             <cr:Athlete name="Ana" restingHeartrate="55" maxHeartrate="190"/>
+          </cr:Set>
+          <cr:Set kind="hr">
+            <cr:Device platformId="..." name="Wahoo TICKR"/>
+            <cr:Athlete name="Ben" restingHeartrate="60" maxHeartrate="185"/>
             <cr:T>0 1000 2000 3000</cr:T>
             <cr:Hr>92 - 95 96</cr:Hr>
           </cr:Set>
-          <cr:Set kind="hr">...</cr:Set>
           <cr:Marker tMs="0" durationMs="3600000" kind="workout"/>
           <cr:Marker tMs="61000" kind="moment" name="Round start"/>
         </cr:CardioRounds>
@@ -110,6 +114,14 @@ no `cr:` block it imports the standard trackpoints as a single HR stream.
   - `cr:T` / `cr:Hr` — parallel space-separated lists. `t_ms` offsets from
     `startedAtMs`; `-` marks a NULL sample. Exact original timestamps, so a set
     on a different clock cadence than the trackpoints loses nothing.
+  - **Except the set that fills the trackpoints**, which is marked
+    `samples="trackpoints"` and has no `cr:T` / `cr:Hr`: its samples are read
+    back from the trackpoints, which already hold them (millisecond times, NULLs
+    as HR-less trackpoints). Storing them twice would let the copies disagree. A
+    single-athlete file therefore has no sample lists in the extension at all.
+    The one lossy case is a reading outside TCX's 1–255 bpm range (e.g. `0` from
+    a strap with no skin contact), which is written as an HR-less trackpoint and
+    so re-imports as NULL.
 - **`cr:Marker`** per marker row (activity-level, as in the data model).
 
 Sizes: trackpoints are ~150 bytes each, so about 0.5 MB per hour of 1 Hz HR per
@@ -166,6 +178,8 @@ Out of scope for the first export PR; designed here so the format supports it.
 - Entry point: **Settings → Backup → Import activity**, using `file_picker`
   (`.tcx`).
 - **With a `cr:` block:** recreate the activity, its sets, samples and markers.
+  The `samples="trackpoints"` set takes its samples from the trackpoints (time
+  minus `startedAtMs`; no `HeartRateBpm` → NULL), the same parsing as plain TCX.
   - Devices are matched by `platformId`; unknown devices are created from the
     snapshot.
   - Athletes are matched by exact name; an unmatched athlete is created from the

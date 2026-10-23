@@ -184,6 +184,17 @@ void main() {
       );
       // The unattributed fake stream has neither device nor athlete.
       expect(sets.last.childElements.map((e) => e.localName), ['T', 'Hr']);
+      // Ben's set fills the trackpoints, so its samples aren't repeated.
+      expect(sets.map((s) => s.getAttribute('samples')), [
+        null,
+        'trackpoints',
+        null,
+        null,
+      ]);
+      expect(sets[1].childElements.map((e) => e.localName), [
+        'Device',
+        'Athlete',
+      ]);
     },
   );
 
@@ -193,6 +204,12 @@ void main() {
     final ben = crSets(encode(data, data.owners[1], includeAll: false));
     expect(ben, hasLength(1));
     expect(ben.single.getAttribute('primary'), 'true');
+    // A one-athlete file has no sample lists in the extension at all.
+    expect(ben.single.getAttribute('samples'), 'trackpoints');
+    expect(
+      ben.single.getElement('T', namespaceUri: kTcxExtensionNamespace),
+      isNull,
+    );
     expect(
       ben.single
           .getElement('Athlete', namespaceUri: kTcxExtensionNamespace)!
@@ -208,6 +225,14 @@ void main() {
             .getAttribute('platformId'),
       ),
       ['strap-1', 'strap-3'],
+    );
+    // Only Ana's first strap is in the trackpoints; her second keeps its list.
+    expect(
+      ana.map(
+        (s) =>
+            s.getElement('T', namespaceUri: kTcxExtensionNamespace)?.innerText,
+      ),
+      [null, '0'],
     );
   });
 

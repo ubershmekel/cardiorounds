@@ -222,8 +222,11 @@ String encodeTcx(
       '          <cr:Activity${_attrs({'startedAtMs': a.startedAtMs, 'durationMs': a.durationMs, 'name': a.name, 'sportType': a.sportType, 'shapeStart': a.shapeStart, 'shapeMid': a.shapeMid, 'shapeEnd': a.shapeEnd})}/>',
     );
   for (final s in extensionSets) {
+    // The trackpoint set's samples aren't repeated here: the trackpoints
+    // already hold them losslessly (ms times, NULLs as HR-less points).
+    final inTrackpoints = s == track;
     out.writeln(
-      '          <cr:Set${_attrs({'kind': s.set.kind, if (s.set.id == primarySetId) 'primary': 'true'})}>',
+      '          <cr:Set${_attrs({'kind': s.set.kind, if (s.set.id == primarySetId) 'primary': 'true', if (inTrackpoints) 'samples': 'trackpoints'})}>',
     );
     if (s.device != null) {
       out.writeln(
@@ -236,14 +239,16 @@ String encodeTcx(
         '            <cr:Athlete${_attrs({'name': s.athlete!.name, 'restingHeartrate': s.athlete!.restingHeartrate, 'maxHeartrate': s.athlete!.maxHeartrate})}/>',
       );
     }
-    out
-      ..writeln(
-        '            <cr:T>${s.samples.map((r) => r.tMs).join(' ')}</cr:T>',
-      )
-      ..writeln(
-        '            <cr:Hr>${s.samples.map((r) => r.hr ?? '-').join(' ')}</cr:Hr>',
-      )
-      ..writeln('          </cr:Set>');
+    if (!inTrackpoints) {
+      out
+        ..writeln(
+          '            <cr:T>${s.samples.map((r) => r.tMs).join(' ')}</cr:T>',
+        )
+        ..writeln(
+          '            <cr:Hr>${s.samples.map((r) => r.hr ?? '-').join(' ')}</cr:Hr>',
+        );
+    }
+    out.writeln('          </cr:Set>');
   }
   for (final m in data.markers) {
     out.writeln(
