@@ -135,7 +135,7 @@ class HrChartGeometry {
     return t.round().clamp(startMs, endMs);
   }
 
-  double yForHr(int hr) =>
+  double yForHr(num hr) =>
       plotTop + (1 - (hr - axis.minY) / axis.span) * plotHeight;
 }
 
@@ -243,7 +243,9 @@ class HrChart extends StatelessWidget {
 class HrSelectionValue {
   const HrSelectionValue({required this.hr, required this.color});
 
-  final int hr;
+  // Unrounded interpolation so the dot rides the drawn line between samples;
+  // the label shows it rounded.
+  final double hr;
   final Color color;
 }
 
@@ -304,6 +306,11 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
   HrChartSelection? _selection;
   var _selectionGeneration = 0;
 
+  // Unclamped-by-label cursor x during a scrub drag. Accumulated separately
+  // from the selection so the cursor can reach the plot edges even while the
+  // label stops at them, and so drags across data gaps don't lose movement.
+  double? _scrubX;
+
   @override
   void didUpdateWidget(_SelectableHrChart oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -337,21 +344,30 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
     setState(() {
       _selection = HrChartSelection(tMs: tMs, values: values);
       _selectionGeneration++;
+      _scrubX = null;
     });
   }
 
-  void _moveSelectionToX(double x, Size size) {
+  void _scrubBy(double dx, Size size) {
+    final selection = _selection;
+    if (selection == null) return;
     final g = HrChartGeometry(
       size: size,
       startMs: widget.startMs,
       endMs: widget.endMs,
       axis: widget.axis,
     );
+    final x = ((_scrubX ?? g.xForT(selection.tMs)) + dx)
+        .clamp(g.plotLeft, g.plotRight)
+        .toDouble();
+    _scrubX = x;
     final tMs = g.tForX(x);
     final values = _valuesAtT(tMs);
     if (values.isEmpty) return;
     setState(() => _selection = HrChartSelection(tMs: tMs, values: values));
   }
+
+  void _endScrub() => _scrubX = null;
 
   /// The reading of each line at [tMs] (one per device with data there). For a
   /// single-device chart this is at most one value in [widget.lineColor].
@@ -370,7 +386,7 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
         : [HrSelectionValue(hr: hr, color: widget.lineColor)];
   }
 
-  int? _hrAtTForPoints(List<HrChartPoint> points, int tMs) {
+  double? _hrAtTForPoints(List<HrChartPoint> points, int tMs) {
     if (tMs < widget.startMs || tMs > widget.endMs) return null;
 
     HrChartPoint? previous;
@@ -386,7 +402,7 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
       }
       final hr = point.hr!;
 
-      if (point.tMs == tMs) return hr;
+      if (point.tMs == tMs) return hr.toDouble();
 
       final prev = previous;
       if (prev != null && prev.tMs <= tMs && tMs <= point.tMs) {
@@ -394,9 +410,9 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
           previous = point;
           continue;
         }
-        if (prev.tMs == point.tMs) return hr;
+        if (prev.tMs == point.tMs) return hr.toDouble();
         final ratio = (tMs - prev.tMs) / (point.tMs - prev.tMs);
-        return (prev.hr! + (hr - prev.hr!) * ratio).round();
+        return prev.hr! + (hr - prev.hr!) * ratio;
       }
 
       previous = point;
@@ -447,6 +463,21 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
                 ),
               ),
             ),
+            // Grab strip around the cursor line so the line itself can be
+            // dragged to scrub. Translucent so taps still reach the plot below.
+            if (selection != null && g.plotWidth > 0)
+              Positioned(
+                left: g.xForT(selection.tMs) - _handleHitSlop,
+                top: g.plotTop,
+                bottom: size.height - g.plotBottom,
+                width: _handleHitSlop * 2,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragUpdate: (d) => _scrubBy(d.delta.dx, size),
+                  onHorizontalDragEnd: (_) => _endScrub(),
+                  onHorizontalDragCancel: _endScrub,
+                ),
+              ),
             if (selection != null && g.plotWidth > 0)
               _SelectionLabel(
                 selection: selection,
@@ -456,7 +487,8 @@ class _SelectableHrChartState extends State<_SelectableHrChart> {
                 textStyle: widget.labelStyle,
                 activityStartMs: widget.activityStartMs,
                 selectionGeneration: _selectionGeneration,
-                onSelectionDragged: (x) => _moveSelectionToX(x, size),
+                onScrub: (dx) => _scrubBy(dx, size),
+                onScrubEnd: _endScrub,
                 onDismissed: () => setState(() => _selection = null),
               ),
           ],
@@ -475,7 +507,8 @@ class _SelectionLabel extends StatefulWidget {
     required this.textStyle,
     required this.activityStartMs,
     required this.selectionGeneration,
-    required this.onSelectionDragged,
+    required this.onScrub,
+    required this.onScrubEnd,
     required this.onDismissed,
   });
 
@@ -486,7 +519,10 @@ class _SelectionLabel extends StatefulWidget {
   final TextStyle textStyle;
   final int? activityStartMs;
   final int selectionGeneration;
-  final ValueChanged<double> onSelectionDragged;
+  // Horizontal drag deltas on the label scrub the cursor; the label then
+  // follows the cursor, stopping at the plot edges while the cursor goes on.
+  final ValueChanged<double> onScrub;
+  final VoidCallback onScrubEnd;
   final VoidCallback onDismissed;
 
   @override
@@ -494,34 +530,21 @@ class _SelectionLabel extends StatefulWidget {
 }
 
 class _SelectionLabelState extends State<_SelectionLabel> {
-  Offset? _position;
+  // User-dragged vertical position; null means the default bottom position.
+  double? _top;
 
   @override
   void didUpdateWidget(_SelectionLabel oldWidget) {
     super.didUpdateWidget(oldWidget);
     // A new plot tap starts its tooltip at the non-obscuring bottom position.
     if (oldWidget.selectionGeneration != widget.selectionGeneration) {
-      _position = null;
+      _top = null;
     }
   }
 
-  Offset _defaultPosition(double width, double height) {
-    final left = (widget.geometry.xForT(widget.selection.tMs) - width / 2)
-        .clamp(widget.geometry.plotLeft, widget.geometry.plotRight - width)
-        .toDouble();
-    return Offset(left, widget.geometry.plotBottom - height);
-  }
-
-  Offset _clampPosition(Offset position, double width, double height) {
-    return Offset(
-      position.dx
-          .clamp(widget.geometry.plotLeft, widget.geometry.plotRight - width)
-          .toDouble(),
-      position.dy
-          .clamp(widget.geometry.plotTop, widget.geometry.plotBottom - height)
-          .toDouble(),
-    );
-  }
+  double _clampTop(double top, double height) => top
+      .clamp(widget.geometry.plotTop, widget.geometry.plotBottom - height)
+      .toDouble();
 
   @override
   Widget build(BuildContext context) {
@@ -532,11 +555,10 @@ class _SelectionLabelState extends State<_SelectionLabel> {
         : _SelectableHrChartState._selectionLabelWidth;
     // One row per device BPM plus the timestamp row; grow with device count.
     final height = 22.0 + widget.selection.values.length * 16.0;
-    final position = _clampPosition(
-      _position ?? _defaultPosition(width, height),
-      width,
-      height,
-    );
+    final left = (geometry.xForT(widget.selection.tMs) - width / 2)
+        .clamp(geometry.plotLeft, geometry.plotRight - width)
+        .toDouble();
+    final top = _clampTop(_top ?? geometry.plotBottom - height, height);
     // Only tint per-device BPM when there's more than one to distinguish.
     final multi = widget.selection.values.length > 1;
     // Highest BPM on top, mirroring the lines' vertical order on the chart.
@@ -544,24 +566,19 @@ class _SelectionLabelState extends State<_SelectionLabel> {
       ..sort((a, b) => b.hr.compareTo(a.hr));
 
     return Positioned(
-      left: position.dx,
-      top: position.dy,
+      left: left,
+      top: top,
       width: width,
       height: height,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onDismissed,
         onPanUpdate: (details) {
-          final nextPosition = _clampPosition(
-            (_position ?? position) + details.delta,
-            width,
-            height,
-          );
-          setState(() {
-            _position = nextPosition;
-          });
-          widget.onSelectionDragged(nextPosition.dx + width / 2);
+          setState(() => _top = _clampTop(top + details.delta.dy, height));
+          widget.onScrub(details.delta.dx);
         },
+        onPanEnd: (_) => widget.onScrubEnd(),
+        onPanCancel: widget.onScrubEnd,
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: widget.backgroundColor,
@@ -584,7 +601,7 @@ class _SelectionLabelState extends State<_SelectionLabel> {
               ),
               for (final v in values)
                 Text(
-                  '${v.hr} bpm',
+                  '${v.hr.round()} bpm',
                   maxLines: 1,
                   overflow: TextOverflow.clip,
                   style: multi
@@ -698,14 +715,21 @@ class HrChartPainter extends CustomPainter {
     final s = selection;
     if (s == null || s.tMs < startMs || s.tMs > endMs) return;
 
+    // Cursor: a full-height line plus a ringed dot on each line's reading.
     final x = g.xForT(s.tMs);
     final linePaint = Paint()
-      ..color = gridColor.withValues(alpha: 0.9)
-      ..strokeWidth = 1;
+      ..color = labelStyle.color ?? gridColor
+      ..strokeWidth = 1.5;
     canvas.drawLine(Offset(x, g.plotTop), Offset(x, g.plotBottom), linePaint);
 
     for (final v in s.values) {
-      canvas.drawCircle(Offset(x, g.yForHr(v.hr)), 3, Paint()..color = v.color);
+      final center = Offset(x, g.yForHr(v.hr));
+      final ringPaint = Paint()
+        ..color = v.color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      canvas.drawCircle(center, 6, ringPaint);
+      canvas.drawCircle(center, 3, Paint()..color = v.color);
     }
   }
 

@@ -315,12 +315,14 @@ converts it to a human marker.
   (see [multi-athlete.md](multi-athlete.md))
 - **Tap inspection** with multiple devices shows the shared timestamp plus one
   BPM value per device, each tinted in its line color, with a dot on each line
-- **Tap inspection**: tapping the plot shows a vertical line at that timestamp
-  and a slightly transparent label along the bottom with the interpolated BPM
-  value at that x position. Dragging the label horizontally scrubs the selected
-  timestamp, moving the line and updating the BPM; its vertical position can
-  also be moved within the plot to reveal a peak. Tapping the label dismisses
-  the line and label.
+- **Tap inspection**: tapping the plot shows a cursor — a vertical line at that
+  timestamp with a ringed dot on the reading — and a slightly transparent label
+  along the bottom with the interpolated BPM value at that x position. Dragging
+  the cursor line horizontally scrubs the selected timestamp; dragging the label
+  does the same. The label follows the cursor but stops at the plot edges, while
+  the cursor itself can always reach the first and last sample. The label's
+  vertical position can also be moved within the plot to reveal a peak. Tapping
+  the label dismisses the cursor and label.
 - **Markers**: vertical tick lines at each marker's timestamp; `round` ticks
   span their full duration; `workout` marker boundaries dim the chart outside
   the effort period
