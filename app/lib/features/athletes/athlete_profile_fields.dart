@@ -184,6 +184,7 @@ class _AthleteProfileFieldsState extends ConsumerState<AthleteProfileFields> {
             helperText: 'Leave empty if unknown',
             border: OutlineInputBorder(),
             suffixIcon: Tooltip(
+              triggerMode: TooltipTriggerMode.tap,
               message: 'Measure first thing in the morning, lying still.',
               child: Icon(Icons.help_outline),
             ),
@@ -202,6 +203,7 @@ class _AthleteProfileFieldsState extends ConsumerState<AthleteProfileFields> {
             helperText: 'Leave empty if unknown',
             border: OutlineInputBorder(),
             suffixIcon: Tooltip(
+              triggerMode: TooltipTriggerMode.tap,
               message:
                   'Used for zone thresholds. Estimate: 220 minus your age; or measure with an increasingly hard interval session for accuracy.',
               child: Icon(Icons.help_outline),
