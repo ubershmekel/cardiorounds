@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +9,13 @@ import '../../core/db/providers.dart';
 import 'sport_type_options.dart';
 
 const recentSportsTypeLimit = 10;
+
+// Space between the field and its options overlay.
+const _optionsGap = 4.0;
+// Breathing room kept between the overlay and the keyboard / screen edge.
+const _optionsEdgeMargin = 8.0;
+// Never shrink the overlay below about one option, even with no room left.
+const _optionsMinHeight = 48.0;
 
 /// Free-text sport-type field with autocomplete over previously used types.
 ///
@@ -58,6 +67,7 @@ class _SportTypeFieldState extends ConsumerState<SportTypeField> {
   // rather than snapping to an option.
   bool _highlightedOptionActive = false;
   bool _overlayUpdateScheduled = false;
+  ScrollPosition? _scrollPosition;
 
   // Anchor the overlay to the field edge it grows from, matching text alignment.
   Alignment get _optionsAlignment => Alignment(
@@ -94,6 +104,19 @@ class _SportTypeFieldState extends ConsumerState<SportTypeField> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The overlay's max height depends on where the field sits on screen, and
+    // a scroll (e.g. the field scrolling into view above the keyboard) moves
+    // it without rebuilding the overlay.
+    final position = Scrollable.maybeOf(context)?.position;
+    if (position != _scrollPosition) {
+      _scrollPosition?.removeListener(_scheduleOptionsOverlayUpdate);
+      _scrollPosition = position?..addListener(_scheduleOptionsOverlayUpdate);
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant SportTypeField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
@@ -112,6 +135,7 @@ class _SportTypeFieldState extends ConsumerState<SportTypeField> {
   void dispose() {
     widget.controller.removeListener(_deactivateHighlightedOption);
     widget.focusNode.removeListener(_updateOptionsOverlay);
+    _scrollPosition?.removeListener(_scheduleOptionsOverlayUpdate);
     _removeOptionsOverlay();
     super.dispose();
   }
@@ -247,26 +271,79 @@ class _SportTypeFieldState extends ConsumerState<SportTypeField> {
     _optionsEntry = null;
   }
 
+  /// Room between the field and the screen edge the overlay grows toward,
+  /// excluding the on-screen keyboard (opening down) or the status bar
+  /// (opening up), so the list scrolls instead of hiding behind them.
+  ///
+  /// [overlayBottom] is the global bottom edge of the overlay we're in. Inside
+  /// a shell route's nested navigator the keyboard inset is stripped from
+  /// MediaQuery (the shell Scaffold resizes its body instead), so there the
+  /// shrunken overlay is the only sign of the keyboard.
+  double _availableOptionsHeight(MediaQueryData media, double overlayBottom) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || !box.hasSize) {
+      return double.infinity;
+    }
+    final fieldTop = box.localToGlobal(Offset.zero).dy;
+    final bottomLimit = math.min(
+      media.size.height - media.viewInsets.bottom,
+      overlayBottom,
+    );
+    final available = widget.openDirection == OptionsViewOpenDirection.up
+        ? fieldTop - media.padding.top
+        : bottomLimit - (fieldTop + box.size.height);
+    return math.max(
+      available - _optionsGap - _optionsEdgeMargin,
+      _optionsMinHeight,
+    );
+  }
+
+  /// Global y of the overlay's bottom edge. Uses the incoming constraints
+  /// rather than the overlay's size, which isn't updated yet mid-layout.
+  double _overlayBottom(OverlayState overlay, BoxConstraints constraints) {
+    final box = overlay.context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || !constraints.hasBoundedHeight) {
+      return double.infinity;
+    }
+    return box.localToGlobal(Offset(0, constraints.maxHeight)).dy;
+  }
+
   Widget _buildOptionsOverlay(BuildContext context) {
     final opensUp = widget.openDirection == OptionsViewOpenDirection.up;
+    // Depending on MediaQuery rebuilds the overlay as the keyboard animates.
+    final media = MediaQuery.of(context);
+    final overlayState = Overlay.of(context);
 
     return CompositedTransformFollower(
       link: _layerLink,
       showWhenUnlinked: false,
       targetAnchor: opensUp ? Alignment.topLeft : Alignment.bottomLeft,
       followerAnchor: opensUp ? Alignment.bottomLeft : Alignment.topLeft,
-      offset: Offset(0, opensUp ? -4 : 4),
-      child: TapRegion(
-        groupId: widget.focusNode,
-        child: SizedBox(
-          width: _fieldWidth > 0 ? _fieldWidth : null,
-          child: SportTypeOptions(
-            options: _options,
-            onSelected: _selectOption,
-            alignment: _optionsAlignment,
-            highlightedIndex: _highlightedOptionActive
-                ? _highlightedOptionIndex
-                : null,
+      offset: Offset(0, opensUp ? -_optionsGap : _optionsGap),
+      // TextFieldTapRegion: without it the TextField treats a mouse press on
+      // an option as a tap outside and unfocuses, removing the overlay before
+      // the tap completes.
+      child: TextFieldTapRegion(
+        child: TapRegion(
+          groupId: widget.focusNode,
+          child: SizedBox(
+            width: _fieldWidth > 0 ? _fieldWidth : null,
+            // LayoutBuilder re-runs when the overlay is resized, e.g. when a
+            // nested navigator's overlay shrinks for the keyboard.
+            child: LayoutBuilder(
+              builder: (context, constraints) => SportTypeOptions(
+                options: _options,
+                onSelected: _selectOption,
+                alignment: _optionsAlignment,
+                maxHeight: _availableOptionsHeight(
+                  media,
+                  _overlayBottom(overlayState, constraints),
+                ),
+                highlightedIndex: _highlightedOptionActive
+                    ? _highlightedOptionIndex
+                    : null,
+              ),
+            ),
           ),
         ),
       ),

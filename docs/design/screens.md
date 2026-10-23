@@ -53,6 +53,9 @@ Two things sit at the top, above the device list:
 - A **sport-type field** (free text, pre-filled with the most recently used
   sport type, with autocomplete from past sport types). The user can change it
   here; it can also be changed on the activity review screen after the workout.
+  The autocomplete dropdown (shared with the recording and review screens) is
+  capped to the space between the field and the on-screen keyboard (or the
+  status bar, when it opens upward) and scrolls when the options don't fit.
 - A single primary **Start** button. It is disabled while no device is selected
   and becomes active the moment one is. There is no per-device Start button.
 
