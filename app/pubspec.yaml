@@ -3,6 +3,8 @@ description:
   "Cardio Rounds: a heart-rate recording app for treadmill, intervals, and BJJ
   rounds."
 publish_to: "none"
+# For example 1.1+48 would be invalid and fail on xcode.
+# x.y.z+build is the correct format.
 version: 1.1.0+48
 
 environment:
