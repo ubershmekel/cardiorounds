@@ -10,6 +10,7 @@ import '../athletes/stream_athlete_picker.dart';
 import '../recording/activity_meta_fields.dart';
 import 'activity_duration.dart';
 import 'activity_metrics.dart';
+import 'export_activity.dart';
 import 'hr_chart.dart';
 import 'hr_stats.dart';
 import 'hr_stats_row.dart';
@@ -53,6 +54,18 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
           ),
         ),
         actions: [
+          // Builder so the share sheet can anchor to this button's own context.
+          Builder(
+            builder: (buttonContext) => IconButton(
+              tooltip: 'Export',
+              icon: const Icon(Icons.share_outlined),
+              onPressed: () => exportActivity(
+                buttonContext,
+                ref.read(databaseProvider),
+                widget.activityId,
+              ),
+            ),
+          ),
           IconButton(
             tooltip: _editing ? 'Done' : 'Edit workout window',
             icon: Icon(_editing ? Icons.check : Icons.edit_outlined),

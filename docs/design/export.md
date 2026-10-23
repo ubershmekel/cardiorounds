@@ -52,7 +52,6 @@ no `cr:` block it imports the standard trackpoints as a single HR stream.
         </Track>
       </Lap>
       <Notes>user note</Notes>
-      <Creator xsi:type="Application_t"><Name>Cardio Rounds</Name>...</Creator>
       <Extensions>
         <cr:CardioRounds xmlns:cr="https://github.com/ubershmekel/cardiorounds/tcx/v1"
                          formatVersion="1" appVersion="1.2.3+45">
@@ -99,9 +98,10 @@ no `cr:` block it imports the standard trackpoints as a single HR stream.
   with a clear message rather than guessing.
 - **`cr:Activity`** carries the activity row (minus ids and created/updated
   timestamps, which the importer assigns).
-- **One `cr:Set` per included sample set**, in `sample_sets.id` order. The first
-  one is marked `primary="true"` and is the activity's reference stream (shape
-  and owner). Each set embeds:
+- **One `cr:Set` per included sample set**, in `sample_sets.id` order. One set
+  is marked `primary="true"`: the activity's real primary set (its reference
+  stream for shape and owner) when it's in the file, otherwise the set in the
+  trackpoints. Each set embeds:
   - `cr:Device` — a snapshot of the device (`platformId`, `name`), absent when
     `device_id` is NULL.
   - `cr:Athlete` — a snapshot of the attributed athlete (`name`, resting/max
@@ -118,9 +118,9 @@ file, plus a few bytes per sample per extra set. Acceptable for a share sheet.
 ## Export UX
 
 An **Export** action (share icon) in the activity review screen's app bar. It
-writes the file to a temp directory and opens the system share sheet via
-`share_plus`. Filename: `cardio-rounds-<yyyy-MM-dd-HHmm>-<name or sport>.tcx`,
-sanitized.
+encodes the file in memory and opens the system share sheet via `share_plus`
+(which writes it to a temp file on mobile). Filename:
+`cardio-rounds-<yyyy-MM-dd-HHmm>-<name or sport>.tcx`, sanitized.
 
 ### Single owner: one tap
 
@@ -134,10 +134,10 @@ If the activity's HR sets belong to **more than one owner**, Export first shows
 a small dialog:
 
 - **"Whose workout?"** — one radio option per owner. An owner is an attributed
-  athlete (shown by name), or an unattributed stream (shown by its device name,
-  each unattributed stream its own option). Defaults to the owner of the primary
-  set. The chosen owner's HR fills the standard trackpoints and the file is
-  named after the activity, as above.
+  athlete (shown by name), or an unattributed stream (shown as "Unassigned
+  (<device name>)", each unattributed stream its own option). Defaults to the
+  owner of the primary set. The chosen owner's HR fills the standard trackpoints
+  and the file is named after the activity, as above.
 - **"Include all athletes"** checkbox, **checked by default**.
   - Checked: the `cr:` block includes **every** set, so the file restores the
     whole session on import. Use for your own backup.
@@ -155,8 +155,9 @@ to the original.
 
 ### Web
 
-Web has no share sheet for files; it downloads the `.tcx` instead, matching how
-"Export database" behaves there. The picker and checkbox are shown on web too.
+Export works on web too, unlike "Export database": the browser's share dialog
+opens where it supports sharing files, otherwise the `.tcx` downloads
+(share_plus's download fallback). The picker and checkbox are shown on web too.
 
 ## Import UX
 
@@ -204,8 +205,11 @@ own `cr:T` / `cr:Lat` / `cr:Lon` lists, so nothing is resampled.
 
 ## Files
 
-- `app/lib/core/export/` (planned) — TCX encoder/decoder
+- [app/lib/core/export/activity_export.dart](../../app/lib/core/export/activity_export.dart)
+  — TCX encoder (decoder later)
+- [app/lib/features/activity/export_activity.dart](../../app/lib/features/activity/export_activity.dart)
+  — export flow and "Whose workout?" dialog
 - [app/lib/features/activity/activity_screen.dart](../../app/lib/features/activity/activity_screen.dart)
-  — Export action and owner picker
+  — Export action in the app bar
 - [app/lib/features/settings/settings_screen.dart](../../app/lib/features/settings/settings_screen.dart)
   — Import activity row (later)
