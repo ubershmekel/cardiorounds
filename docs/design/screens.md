@@ -287,6 +287,22 @@ unattributed or its profile is incomplete, the shape renders **without** those
 values rather than borrowing the default athlete's. See
 [multi-device-recording.md](multi-device-recording.md).
 
+### Export
+
+A **share icon** in the app bar, next to the edit icon, exports the activity as
+a TCX file (see [export.md](export.md)) and opens the system share sheet (web:
+downloads the file).
+
+- If every HR stream has the same owner, it exports immediately.
+- If the streams belong to more than one owner (athletes, or unattributed
+  streams labelled by device name), a **"Whose workout?"** dialog appears first:
+  - One radio option per owner, defaulting to the primary stream's owner. The
+    chosen owner's HR is what other apps (Strava, Garmin, ...) show.
+  - An **"Include all athletes"** checkbox, checked by default. Unchecked, the
+    file carries only the chosen owner's streams, so other people's heart-rate
+    data isn't shared.
+  - **Cancel** / **Export** buttons.
+
 ### Marker editing
 
 Tap the "edit" icon in the app bar to enter edit mode. While editing, the chart

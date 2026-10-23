@@ -18,9 +18,8 @@ Implementation tasks in priority order. Delete lines that are done.
   span markers
 - Span analysis like a recovery span would show HR slope, duration, and other
   metrics.
-- Share individual workout via share sheet
-- Export activity data to a portable file (JSON or CSV, or some other format)
-- Import activity export file
+- Export activity as TCX via share sheet, with owner picker (see export.md)
+- Import activity TCX file (Cardio Rounds or plain third-party TCX)
 - Import from backup file (sqlite db)
 - Google Drive backup / restore
 - Allow logging "distance" and "speed" for treadmill workouts
