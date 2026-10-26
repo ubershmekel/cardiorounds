@@ -30,18 +30,27 @@ enum NativeAppLog {
     return dirs.first?.appendingPathComponent("cardio_rounds.log")
   }()
 
-  static func log(_ tag: String, _ message: String) {
+  /// `sync: true` returns only after the line is handed to the OS, so it
+  /// survives the process being killed right after (e.g. a force-close of a
+  /// launch that hangs). Use it for rare checkpoints, not per-sample logging.
+  static func log(_ tag: String, _ message: String, sync: Bool = false) {
     let line = "\(formatter.string(from: Date())) [\(tag)] \(message)\n"
-    queue.async {
-      guard let url = fileURL, let data = line.data(using: .utf8) else { return }
-      if let handle = try? FileHandle(forWritingTo: url) {
-        defer { try? handle.close() }
-        handle.seekToEndOfFile()
-        handle.write(data)
-      } else {
-        // File may not exist yet if Dart hasn't logged this launch.
-        try? data.write(to: url, options: .atomic)
-      }
+    if sync {
+      queue.sync { append(line) }
+    } else {
+      queue.async { append(line) }
+    }
+  }
+
+  private static func append(_ line: String) {
+    guard let url = fileURL, let data = line.data(using: .utf8) else { return }
+    if let handle = try? FileHandle(forWritingTo: url) {
+      defer { try? handle.close() }
+      handle.seekToEndOfFile()
+      handle.write(data)
+    } else {
+      // File may not exist yet if Dart hasn't logged this launch.
+      try? data.write(to: url, options: .atomic)
     }
   }
 }

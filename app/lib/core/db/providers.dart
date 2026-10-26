@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../hr/hr_source.dart';
+import '../startup_diagnostics.dart';
 import 'database.dart';
 
 /// One selected HR source paired with the [HrSampleRow] set it records into.
@@ -50,7 +51,9 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 
 final startupProvider = FutureProvider<void>((ref) async {
   final db = ref.watch(databaseProvider);
-  await db.ensureDefaultAthlete();
+  // No timeout: this opens the database and may run a long migration, which
+  // must not be abandoned midway. The step still logs if it runs slow.
+  await startupStep('Database', db.ensureDefaultAthlete);
 });
 
 final defaultAthleteProvider = StreamProvider<Athlete>((ref) {

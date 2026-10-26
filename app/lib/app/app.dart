@@ -44,10 +44,10 @@ class _CardioRoundsAppState extends ConsumerState<CardioRoundsApp> {
       builder: (context, child) {
         return startup.when(
           loading: () => const _SplashScaffold(),
-          error: (error, stackTrace) => _StartupErrorScaffold(
+          error: (error, stackTrace) => StartupErrorScaffold(
             error: error,
             stackTrace: stackTrace,
-            onRetry: () {
+            onRetry: () async {
               ref.invalidate(databaseProvider);
               ref.invalidate(startupProvider);
             },
@@ -55,6 +55,36 @@ class _CardioRoundsAppState extends ConsumerState<CardioRoundsApp> {
           data: (_) => _maybePortraitFrame(child),
         );
       },
+    );
+  }
+}
+
+/// Shown when startup fails before the [ProviderScope] exists (e.g. a platform
+/// plugin didn't answer), so a failed launch never leaves the native splash up.
+class StartupFailureApp extends StatelessWidget {
+  const StartupFailureApp({
+    super.key,
+    required this.error,
+    required this.stackTrace,
+    required this.onRetry,
+  });
+
+  final Object error;
+  final StackTrace stackTrace;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Cardio Rounds',
+      debugShowCheckedModeBanner: false,
+      theme: buildDarkTheme(),
+      themeMode: ThemeMode.dark,
+      home: StartupErrorScaffold(
+        error: error,
+        stackTrace: stackTrace,
+        onRetry: onRetry,
+      ),
     );
   }
 }
@@ -68,8 +98,10 @@ class _SplashScaffold extends StatelessWidget {
   }
 }
 
-class _StartupErrorScaffold extends StatefulWidget {
-  const _StartupErrorScaffold({
+/// Blocking startup error state; see "Startup states" in docs/design/screens.md.
+class StartupErrorScaffold extends StatefulWidget {
+  const StartupErrorScaffold({
+    super.key,
     required this.error,
     required this.stackTrace,
     required this.onRetry,
@@ -77,13 +109,27 @@ class _StartupErrorScaffold extends StatefulWidget {
 
   final Object error;
   final StackTrace stackTrace;
-  final VoidCallback onRetry;
+  final Future<void> Function() onRetry;
 
   @override
-  State<_StartupErrorScaffold> createState() => _StartupErrorScaffoldState();
+  State<StartupErrorScaffold> createState() => _StartupErrorScaffoldState();
 }
 
-class _StartupErrorScaffoldState extends State<_StartupErrorScaffold> {
+class _StartupErrorScaffoldState extends State<StartupErrorScaffold> {
+  // Disables "Try again" while an attempt runs (up to the startup timeout), so
+  // the user sees progress instead of tapping repeatedly.
+  bool _retrying = false;
+
+  Future<void> _retry() async {
+    setState(() => _retrying = true);
+    try {
+      await widget.onRetry();
+    } finally {
+      // A successful retry usually replaces this screen entirely.
+      if (mounted) setState(() => _retrying = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -129,8 +175,13 @@ class _StartupErrorScaffoldState extends State<_StartupErrorScaffold> {
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
-                    onPressed: widget.onRetry,
-                    icon: const Icon(Icons.refresh),
+                    onPressed: _retrying ? null : _retry,
+                    icon: _retrying
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh),
                     label: const Text('Try again'),
                   ),
                   const SizedBox(height: 16),

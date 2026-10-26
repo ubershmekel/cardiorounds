@@ -8,9 +8,21 @@ fails, show a concise blocking error state with:
 - **Couldn't start Cardio Rounds**
 - A short support message, not the raw exception or stack trace
 - **Download logs** as the primary action
-- **Try again** as the secondary action
+- **Try again** as the secondary action. While an attempt runs it is disabled
+  and shows a small spinner in place of its icon.
 
 The full startup error is written to app logs for support export.
+
+The same error state also covers failures before the app's own startup work,
+such as a platform plugin that throws or doesn't answer within a few seconds
+while loading preferences. Startup must always end in a drawn screen (the app,
+or this error state) — never an indefinite native splash. Optional startup steps
+(e.g. Bluetooth power-alert options) are logged and skipped on failure.
+
+Every launch writes timestamped `[AppNative]` and `[Startup]` checkpoints
+(native launch, scene connect, plugin registration, each startup step, runApp,
+first frame) so a launch that hangs and is force-closed still shows how far it
+got in exported logs.
 
 ## Home screen
 
