@@ -86,7 +86,7 @@ a {
   color: inherit;
 }
 
-.cta-group a {
+.cta-group > a {
   display: flex;
   min-height: 3.25rem;
   align-items: center;
@@ -103,21 +103,21 @@ a {
     transform 150ms ease;
 }
 
-.cta-group a:first-child {
+.cta-group > a:first-child {
   border-color: var(--accent);
   background: var(--accent);
 }
 
-.cta-group a:hover,
-.cta-group a:focus-visible {
+.cta-group > a:hover,
+.cta-group > a:focus-visible {
   border-color: var(--accent-strong);
   background: rgba(255, 84, 112, 0.2);
   outline: none;
   transform: translateY(-1px);
 }
 
-.cta-group a:first-child:hover,
-.cta-group a:first-child:focus-visible {
+.cta-group > a:first-child:hover,
+.cta-group > a:first-child:focus-visible {
   background: #e13b4b;
 }
 
