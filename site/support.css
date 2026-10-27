@@ -4,7 +4,6 @@
   --fg: #f7f7f7;
   --muted: #b8b8b8;
   --line: #333333;
-  --accent: #d32f2f;
   --accent-strong: #ff5470;
 }
 
@@ -103,22 +102,12 @@ a {
     transform 150ms ease;
 }
 
-.cta-group > a:first-child {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-
 .cta-group > a:hover,
 .cta-group > a:focus-visible {
   border-color: var(--accent-strong);
   background: rgba(255, 84, 112, 0.2);
   outline: none;
   transform: translateY(-1px);
-}
-
-.cta-group > a:first-child:hover,
-.cta-group > a:first-child:focus-visible {
-  background: #e13b4b;
 }
 
 .links {
