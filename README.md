@@ -3,6 +3,14 @@
 An open source heart rate monitoring app. With charts, zones, and analysis
 designed for treadmill running, interval training and BJJ rounds.
 
+## Download
+
+- **Android:**
+  [Get it on Google Play](https://play.google.com/store/apps/details?id=com.andluck.cardio)
+- **iOS:**
+  [Download on the App Store](https://apps.apple.com/us/app/cardio-rounds/id6777868430)
+- [Try the web app (fake heart rate data only)](https://ubershmekel.github.io/cardiorounds/try/)
+
 ## Features
 
 - Local data storage, no sign-in, no ads, all private
